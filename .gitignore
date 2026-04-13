@@ -1,0 +1,336 @@
+# ================================================================
+# DealScrapper v2 - Monorepo .gitignore
+# Modern TypeScript microservices with NestJS, Prisma, and Turbo
+# ================================================================
+
+# ================================================================
+# NODE.JS & PACKAGE MANAGERS
+# ================================================================
+
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/
+.pnp
+.pnp.js
+.npm/
+
+# Package lock files (we use pnpm exclusively)
+package-lock.json
+yarn.lock
+
+# Package manager debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# ================================================================
+# BUILD OUTPUTS & COMPILED FILES
+# ================================================================
+
+# TypeScript compilation outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Next.js builds (for future frontend)
+.next/
+.nuxt/
+
+# NestJS build artifacts
+apps/*/dist/
+packages/*/dist/
+
+# Compiled TypeScript declaration files (generated)
+**/*.d.ts.map
+
+# ================================================================
+# DEVELOPMENT & BUILD TOOLS
+# ================================================================
+
+# Turbo cache
+.turbo/
+**/.turbo/
+
+# ESLint cache
+.eslintcache
+
+# Prettier cache
+.cache/
+.parcel-cache/
+
+# TypeScript incremental compilation
+*.tsbuildinfo
+
+# ================================================================
+# TESTING
+# ================================================================
+
+# Test coverage reports
+coverage/
+.nyc_output/
+*.lcov
+
+# Test results and artifacts
+test-results/
+playwright-report/
+test-report/
+
+# ================================================================
+# ENVIRONMENT & CONFIGURATION
+# ================================================================
+
+# Environment files (secrets and config)
+.env
+.env.local
+.env.dev.local
+.env.test.local
+.env.prod.local
+.env.*.local
+
+# Local development overrides
+.env.dev
+# .env.test - NOT ignored, safe to commit (only test credentials)
+.env.pro
+
+# ================================================================
+# LOGGING & MONITORING
+# ================================================================
+
+# Application logs (Winston daily rotate files)
+logs/
+**/logs/
+*.log
+**/*.log
+
+# Process logs (stdout/stderr from services)
+apps/*/logs/process.log
+
+# Service-specific log directories
+apps/api/logs/
+apps/scraper/logs/
+apps/notifier/logs/
+apps/scheduler/logs/
+
+# Log files with date patterns
+*_current.log
+*_error_*.log  
+*_exceptions_*.log
+*_rejections_*.log
+*_*_*.log
+
+# ================================================================
+# DATABASE & DATA STORAGE
+# ================================================================
+
+# Local database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Database data directories (Docker volumes)
+postgres_data/
+redis_data/
+elasticsearch_data/
+pgadmin_data/
+mysql_data/
+
+# Prisma development artifacts
+prisma/migrations/dev/
+prisma/dev.db*
+
+# ================================================================
+# MICROSERVICES & INFRASTRUCTURE
+# ================================================================
+
+# Docker development data
+docker_data/
+volumes/
+
+# Puppeteer downloads and cache (Scraper service)
+.puppeteer_cache/
+chrome_data/
+browser_cache/
+
+# Elasticsearch data and indices
+elasticsearch/
+es_data/
+
+# BUT: Whitelist source code directories named elasticsearch
+!apps/*/src/elasticsearch/
+!apps/*/src/elasticsearch/**
+
+# Redis dump files
+dump.rdb
+redis.conf
+
+# ================================================================
+# IDE & EDITOR FILES
+# ================================================================
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Vim/Neovim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+.\#*
+.dir-locals.el
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ================================================================
+# OPERATING SYSTEM FILES
+# ================================================================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# ================================================================
+# TEMPORARY & CACHE FILES
+# ================================================================
+
+# Temporary directories
+tmp/
+temp/
+.tmp/
+.temp/
+
+# Runtime files
+*.pid
+*.seed
+*.pid.lock
+pids/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+
+# ================================================================
+# SECURITY & SENSITIVE DATA
+# ================================================================
+
+# SSL certificates and keys
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+ssl/
+certificates/
+private/
+
+# JWT secrets and auth keys
+jwt-secret*
+auth-keys/
+
+# API keys and credentials
+credentials/
+secrets/
+
+# ================================================================
+# RUNTIME & DEVELOPMENT ARTIFACTS
+# ================================================================
+
+# Process managers
+.pm2/
+
+# Runtime data
+runtime/
+
+# Upload directories
+uploads/
+public/uploads/
+
+# Generated documentation
+docs/api/
+docs/coverage/
+
+# ================================================================
+# SERVICE-SPECIFIC EXCLUSIONS
+# ================================================================
+
+# Email templates (built/cached versions)
+apps/notifier/templates/compiled/
+
+# Scraper cached pages, fixtures, and data
+apps/scraper/cached_pages/
+apps/scraper/test/fixtures/live_pages/
+data/
+
+# User uploaded content
+user_content/
+media/
+
+# ================================================================
+# OPTIONAL: DEVELOPMENT UTILITIES
+# ================================================================
+
+# Debug files
+debug/
+.debug/
+!**/components/debug/
+!**/shared/debug/
+
+# Performance profiling
+profile/
+*.prof
+
+# Benchmark results
+bench/
+benchmark/
+
+# Local testing scripts
+test-local.*
+debug-*
+dev-*
+.env.prod
+!docs/memories/
+
+test/screenshots
+test/videos
+docs/memories/old
+.claude/settings.local.json.vscode/
+.claude/settings.local.json
+.vscode

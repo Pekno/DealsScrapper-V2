@@ -1,0 +1,43 @@
+{
+  "name": "@dealscrapper/database",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm run db:generate && tsc -b",
+    "dev": "tsc -b --watch --preserveWatchOutput",
+    "clean": "shx rm -rf dist tsconfig.tsbuildinfo",
+    "db:generate": "dotenv -e ../../.env prisma generate",
+    "db:push": "dotenv -e ../../.env prisma db push",
+    "db:push:force": "dotenv -e ../../.env prisma db push --accept-data-loss",
+    "db:migrate": "dotenv -e ../../.env prisma migrate dev",
+    "db:migrate:prod": "dotenv -e ../../.env prisma migrate deploy",
+    "db:studio": "dotenv -e ../../.env -- prisma studio",
+    "db:seed": "tsx seed.ts",
+    "db:reset": "dotenv -e ../../.env prisma migrate reset --force"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.3",
+    "@nestjs/core": "^11.1.3",
+    "@prisma/client": "^6.11.0",
+    "isomorphic-dompurify": "^2.25.0",
+    "jsdom": "^26.1.0",
+    "passport-local": "^1.0.0",
+    "prisma": "^6.11.0"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^8.0.0",
+    "typescript": "^5.8.3"
+  }
+}

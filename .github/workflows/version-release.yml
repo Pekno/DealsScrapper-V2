@@ -1,0 +1,409 @@
+name: Version, Build & Publish
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      force_services:
+        description: "Comma-separated services to force release (e.g., api,web). Leave empty for auto-detect."
+        required: false
+        default: ""
+      bump_type:
+        description: "Force bump type (only used with force_services)"
+        required: false
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────
+  # Job 1: Detect which services changed and compute new versions
+  # ─────────────────────────────────────────────────────────────────────
+  detect-changes:
+    name: Detect changes & compute versions
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.compute.outputs.matrix }}
+      has_changes: ${{ steps.compute.outputs.has_changes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes and compute versions
+        id: compute
+        run: |
+          set -euo pipefail
+
+          ALL_SERVICES=("api" "web" "scraper" "notifier" "scheduler")
+          declare -A AFFECTED_SERVICES
+
+          # ── Determine affected services ──────────────────────────────
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ github.event.inputs.force_services }}" ]]; then
+            # Manual trigger with specific services
+            IFS=',' read -ra FORCED <<< "${{ github.event.inputs.force_services }}"
+            for svc in "${FORCED[@]}"; do
+              svc=$(echo "$svc" | xargs)  # trim whitespace
+              AFFECTED_SERVICES["$svc"]=1
+            done
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Manual trigger without specific services — release all
+            for svc in "${ALL_SERVICES[@]}"; do
+              AFFECTED_SERVICES["$svc"]=1
+            done
+          else
+            # Auto-detect from changed files
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
+              CHANGED_FILES=$(git diff --name-only HEAD~1..HEAD)
+            else
+              # First commit - all services affected
+              CHANGED_FILES=$(git ls-tree -r --name-only HEAD)
+            fi
+
+            PACKAGES_CHANGED=false
+            while IFS= read -r file; do
+              [[ -z "$file" ]] && continue
+
+              # packages/* changes affect all services
+              if [[ "$file" == packages/* ]]; then
+                PACKAGES_CHANGED=true
+              fi
+
+              # apps/<service>/* changes affect only that service
+              for svc in "${ALL_SERVICES[@]}"; do
+                if [[ "$file" == apps/${svc}/* ]]; then
+                  AFFECTED_SERVICES["$svc"]=1
+                fi
+              done
+            done <<< "$CHANGED_FILES"
+
+            if [[ "$PACKAGES_CHANGED" == "true" ]]; then
+              for svc in "${ALL_SERVICES[@]}"; do
+                AFFECTED_SERVICES["$svc"]=1
+              done
+            fi
+          fi
+
+          # ── Determine bump type from conventional commits ────────────
+          if [[ -n "${{ github.event.inputs.bump_type }}" && -n "${{ github.event.inputs.force_services }}" ]]; then
+            BUMP_TYPE="${{ github.event.inputs.bump_type }}"
+          else
+            BUMP_TYPE="patch"  # default
+
+            # Get commit messages from the merge
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
+              COMMITS=$(git log --format="%s%n%b" HEAD~1..HEAD)
+            else
+              COMMITS=$(git log --format="%s%n%b" -1 HEAD)
+            fi
+
+            # Check for breaking changes first (highest priority)
+            if echo "$COMMITS" | grep -qiE "^[a-z]+(\(.+\))?!:|BREAKING[ -]CHANGE"; then
+              BUMP_TYPE="major"
+            elif echo "$COMMITS" | grep -qiE "^feat(\(.+\))?:"; then
+              BUMP_TYPE="minor"
+            fi
+            # patch is default for fix:, perf:, refactor:, chore:, etc.
+          fi
+
+          echo "Bump type: $BUMP_TYPE"
+          echo "Affected services: ${!AFFECTED_SERVICES[*]}"
+
+          # ── Compute new versions for each affected service ───────────
+          MATRIX_ENTRIES=()
+
+          for svc in "${!AFFECTED_SERVICES[@]}"; do
+            # Find the latest tag for this service
+            LATEST_TAG=$(git tag -l "${svc}/v*" --sort=-version:refname | head -n 1 || true)
+
+            if [[ -z "$LATEST_TAG" ]]; then
+              # No existing tag, start from v0.0.0
+              PREV_VERSION="0.0.0"
+            else
+              PREV_VERSION="${LATEST_TAG#${svc}/v}"
+            fi
+
+            # Parse semver
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$PREV_VERSION"
+            MAJOR=${MAJOR:-0}
+            MINOR=${MINOR:-0}
+            PATCH=${PATCH:-0}
+
+            # Bump
+            case "$BUMP_TYPE" in
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                ;;
+              patch)
+                PATCH=$((PATCH + 1))
+                ;;
+            esac
+
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            echo "  ${svc}: v${PREV_VERSION} → v${NEW_VERSION}"
+
+            MATRIX_ENTRIES+=("{\"service\":\"${svc}\",\"version\":\"${NEW_VERSION}\",\"previous_version\":\"${PREV_VERSION}\",\"tag\":\"${svc}/v${NEW_VERSION}\"}")
+          done
+
+          # ── Build output ─────────────────────────────────────────────
+          if [[ ${#MATRIX_ENTRIES[@]} -eq 0 ]]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
+            echo "No services affected by this change."
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            JOINED=$(IFS=','; echo "${MATRIX_ENTRIES[*]}")
+            echo "matrix={\"include\":[${JOINED}]}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Job 2: Build and push Docker images for each affected service
+  # ─────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build ${{ matrix.service }} v${{ matrix.version }}
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare image tags
+        id: tags
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}"
+          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          SHA_SHORT=$(git rev-parse --short HEAD)
+
+          TAGS="${IMAGE}:latest,${IMAGE}:sha-${SHA_SHORT},${IMAGE}:${{ matrix.version }}"
+
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "sha_short=$SHA_SHORT" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.global
+          build-args: |
+            SERVICE=${{ matrix.service }}
+            PNPM_VERSION=10.12.4
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ matrix.version }}
+            org.opencontainers.image.description=DealsScrapper ${{ matrix.service }} service v${{ matrix.version }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Job 3: Create git tags and GitHub releases
+  # ─────────────────────────────────────────────────────────────────────
+  create-tags:
+    name: Tag & release ${{ matrix.service }} v${{ matrix.version }}
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-and-push]
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ matrix.tag }}" -m "${{ matrix.service }} v${{ matrix.version }}"
+          git push origin "${{ matrix.tag }}"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          set -euo pipefail
+
+          PREV_TAG="${{ matrix.service }}/v${{ matrix.previous_version }}"
+
+          # Check if previous tag exists
+          if git rev-parse "$PREV_TAG" >/dev/null 2>&1; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            # No previous tag, get all commits
+            RANGE="HEAD"
+          fi
+
+          # Generate changelog from conventional commits
+          CHANGELOG=""
+
+          # Breaking changes
+          BREAKING=$(git log --format="- %s" "$RANGE" -- "apps/${{ matrix.service }}/" "packages/" 2>/dev/null | grep -iE "^- [a-z]+(\(.+\))?!:|BREAKING" || true)
+          if [[ -n "$BREAKING" ]]; then
+            CHANGELOG+=$'\n### ⚠️ Breaking Changes\n'"$BREAKING"$'\n'
+          fi
+
+          # Features
+          FEATURES=$(git log --format="- %s" "$RANGE" -- "apps/${{ matrix.service }}/" "packages/" 2>/dev/null | grep -iE "^- feat" || true)
+          if [[ -n "$FEATURES" ]]; then
+            CHANGELOG+=$'\n### ✨ Features\n'"$FEATURES"$'\n'
+          fi
+
+          # Fixes
+          FIXES=$(git log --format="- %s" "$RANGE" -- "apps/${{ matrix.service }}/" "packages/" 2>/dev/null | grep -iE "^- fix" || true)
+          if [[ -n "$FIXES" ]]; then
+            CHANGELOG+=$'\n### 🐛 Bug Fixes\n'"$FIXES"$'\n'
+          fi
+
+          # Other changes
+          OTHER=$(git log --format="- %s" "$RANGE" -- "apps/${{ matrix.service }}/" "packages/" 2>/dev/null | grep -ivE "^- (feat|fix)" | grep -ivE "BREAKING" || true)
+          if [[ -n "$OTHER" ]]; then
+            CHANGELOG+=$'\n### 🔧 Other Changes\n'"$OTHER"$'\n'
+          fi
+
+          if [[ -z "$CHANGELOG" ]]; then
+            CHANGELOG="No conventional commit messages found for this service."
+          fi
+
+          # Write to file to preserve newlines
+          echo "$CHANGELOG" > /tmp/changelog.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ matrix.tag }}" \
+            --title "${{ matrix.service }} v${{ matrix.version }}" \
+            --notes-file /tmp/changelog.md \
+            --latest
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Job 4: Verify all updated images are pullable
+  # ─────────────────────────────────────────────────────────────────────
+  verify:
+    name: Verify images
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-and-push]
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    timeout-minutes: 10
+    permissions:
+      packages: read
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify all updated images are pullable
+        run: |
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          MATRIX='${{ needs.detect-changes.outputs.matrix }}'
+
+          echo "$MATRIX" | jq -r '.include[] | "\(.service) \(.version)"' | while read -r service version; do
+            IMAGE="${{ env.REGISTRY }}/${REPO}/${service}:${version}"
+            echo "Pulling ${IMAGE}..."
+            docker pull "$IMAGE"
+            echo "${service} v${version} ✓"
+          done
+
+          echo "All images verified."
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Job 5: Update package.json versions and commit back to main
+  # ─────────────────────────────────────────────────────────────────────
+  update-versions:
+    name: Sync package.json versions
+    runs-on: ubuntu-latest
+    needs: [detect-changes, create-tags]
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update package.json versions
+        run: |
+          set -euo pipefail
+
+          MATRIX='${{ needs.detect-changes.outputs.matrix }}'
+
+          while read -r service version; do
+            PKG_FILE="apps/${service}/package.json"
+            if [[ -f "$PKG_FILE" ]]; then
+              jq --arg v "$version" '.version = $v' "$PKG_FILE" > "${PKG_FILE}.tmp"
+              mv "${PKG_FILE}.tmp" "$PKG_FILE"
+              echo "Updated ${PKG_FILE} → ${version}"
+            fi
+          done < <(echo "$MATRIX" | jq -r '.include[] | "\(.service) \(.version)"')
+
+      - name: Commit and push version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add apps/*/package.json
+
+          # Only commit if there are actual changes
+          if git diff --cached --quiet; then
+            echo "No package.json changes to commit."
+          else
+            MATRIX='${{ needs.detect-changes.outputs.matrix }}'
+            SUMMARY=$(echo "$MATRIX" | jq -r '.include[] | "\(.service)@\(.version)"' | paste -sd ", " -)
+
+            git commit -m "chore(release): bump package.json versions - ${SUMMARY}"
+            git push origin main
+          fi

@@ -1,0 +1,29 @@
+{
+  "name": "@dealscrapper/shared-config",
+  "version": "1.0.0",
+  "description": "Shared configuration validation module for DealsScrappper services",
+  "type": "module",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "shx rm -rf dist tsconfig.tsbuildinfo",
+    "type-check": "tsc --noEmit",
+    "dev": "tsc --watch"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.0"
+  },
+  "dependencies": {
+    "@dealscrapper/shared-logging": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "typescript": "^5.6.3"
+  }
+}
