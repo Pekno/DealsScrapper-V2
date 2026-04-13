@@ -1,0 +1,172 @@
+name: PR Tests - Unit & E2E
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    types: [opened, synchronize, reopened]
+
+# Cancel in-progress runs when a new commit is pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test-complete:
+    name: Complete Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.4
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Cache Cypress binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: ${{ runner.os }}-cypress-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-cypress-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Cypress binary
+        run: npx cypress install
+
+      - name: Verify test environment file
+        run: |
+          # Verify .env.test exists (it's now committed to repo)
+          if [ ! -f .env.test ]; then
+            echo "❌ Error: .env.test not found in repository"
+            exit 1
+          fi
+          echo "✓ Using .env.test from repository"
+
+      - name: Build shared packages
+        run: pnpm build:packages
+        env:
+          NODE_ENV: test
+          CI: true
+
+      - name: Build services for E2E testing
+        run: pnpm cli build
+        env:
+          NODE_ENV: test
+          CI: true
+
+      - name: Start infrastructure services
+        run: pnpm cli infra start
+        env:
+          NODE_ENV: test
+          CI: true
+
+      - name: Start application services
+        run: pnpm cli services start --env test
+        env:
+          NODE_ENV: test
+          CI: true
+
+      - name: Run unit tests
+        run: pnpm cli test unit
+        env:
+          NODE_ENV: test
+          CI: true
+          LOG_LEVEL: error
+
+      - name: Run integration tests
+        run: pnpm cli test integration
+        env:
+          NODE_ENV: test
+          CI: true
+          LOG_LEVEL: error
+
+      - name: Run Cypress E2E tests
+        run: pnpm test:e2e
+        env:
+          NODE_ENV: test
+          CI: true
+
+      - name: Stop services
+        if: always()
+        run: pnpm cli services stop && pnpm cli infra stop
+
+      - name: Upload Cypress videos
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-videos
+          path: test/videos
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Cypress screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-screenshots
+          path: test/screenshots
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload Cypress reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-reports
+          path: |
+            cypress/reports
+            test/reports
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload service logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: service-logs
+          path: |
+            apps/api/logs/**/*.log
+            apps/scraper/logs/**/*.log
+            apps/notifier/logs/**/*.log
+            apps/scheduler/logs/**/*.log
+            apps/web/logs/**/*.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload test coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-coverage
+          path: |
+            apps/*/coverage
+            packages/*/coverage
+          retention-days: 7
+          if-no-files-found: ignore

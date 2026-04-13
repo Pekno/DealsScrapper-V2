@@ -1,0 +1,36 @@
+{
+  "name": "@dealscrapper/shared-repository",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./base": {
+      "types": "./dist/base.repository.d.ts",
+      "default": "./dist/base.repository.js"
+    },
+    "./interfaces": {
+      "types": "./dist/interfaces.d.ts",
+      "default": "./dist/interfaces.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch --preserveWatchOutput",
+    "clean": "shx rm -rf dist tsconfig.tsbuildinfo"
+  },
+  "dependencies": {
+    "@dealscrapper/database": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

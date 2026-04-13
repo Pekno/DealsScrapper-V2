@@ -1,0 +1,435 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["queryCompiler"]
+  engineType      = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model Site {
+  id                   String   @id // 'dealabs', 'vinted', 'leboncoin'
+  name                 String   // Display name: 'Dealabs'
+  baseUrl              String   // Base URL: 'https://www.dealabs.com'
+  categoryDiscoveryUrl String   // Category discovery URL: 'https://www.dealabs.com/groupe/'
+  color                String   // Brand color: '#FF6B00'
+  isActive             Boolean  @default(true)
+  iconUrl              String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  categories Category[]
+  articles   Article[]
+
+  @@map("sites")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String // Will store hashed passwords
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Security fields
+  emailVerified      Boolean   @default(false)
+  emailVerifiedAt    DateTime?
+  lastLoginAt        DateTime?
+  loginAttempts      Int       @default(0)
+  lockedUntil        DateTime?
+  passwordChangedAt  DateTime?
+
+  // Profile information
+  firstName String?
+  lastName  String?
+  timezone  String? @default("UTC")
+  locale    String? @default("en")
+
+  // Preferences
+  emailNotifications Boolean @default(true)
+  marketingEmails    Boolean @default(false)
+  weeklyDigest       Boolean @default(true)
+
+  // Existing relations
+  filters       Filter[]
+  notifications Notification[]
+  sessions      UserSession[]
+
+  @@index([email])
+  @@index([emailVerified])
+  @@index([lastLoginAt])
+  @@map("users")
+}
+
+model UserSession {
+  id           String   @id @default(cuid())
+  userId       String
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  ipAddress    String?
+  userAgent    String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshToken])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+model Filter {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Note: enabledSites removed - derived from categories instead
+  // Sites are determined by: Filter -> FilterCategory -> Category -> Site
+
+  // Filter Expression (supports complex logical operations)
+  filterExpression Json // FilterExpression tree (AND, OR, REGEX, CONTAINS, >, <, etc.)
+
+  // Notification settings
+  immediateNotifications Boolean @default(true)
+  digestFrequency        String  @default("daily") // "hourly", "daily", "weekly", "disabled"
+  maxNotificationsPerDay Int     @default(50)
+
+  // Performance tracking
+  totalMatches   Int       @default(0)
+  matchesLast24h Int       @default(0)
+  lastMatchAt    DateTime?
+
+  // Proper relationships
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matches    Match[]
+  categories FilterCategory[] // Many-to-many with Categories
+
+  @@index([userId])
+  @@index([active])
+  @@index([lastMatchAt])
+  @@map("filters")
+}
+
+model Article {
+  id         String @id @default(cuid())
+  externalId String // Site's native ID
+
+  // Site relationship (cascade delete when Site is deleted)
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  // ===== UNIVERSAL FIELDS (exist on ALL sites) =====
+  title       String
+  description String?
+  url         String
+  imageUrl    String?
+
+  currentPrice Float? // Can be null for free items
+
+  // Categorization
+  categoryId   String
+  categoryPath String[] // Breadcrumb trail
+
+  // Status
+  isActive  Boolean @default(true)
+  isExpired Boolean @default(false)
+  expiresAt DateTime? // When this article was detected as expired (presence-comparison scraping); site-agnostic, distinct from ArticleDealabs.expiresAt (advance expiry notice from Dealabs)
+
+  // ===== SEMI-UNIVERSAL FIELDS (not all sites have these) =====
+  location    String?   // Only LeBonCoin shows prominently
+  publishedAt DateTime? // Dealabs + LeBonCoin (Vinted doesn't show in listings)
+
+  // Timestamps
+  scrapedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships (ONLY to universal models)
+  category Category @relation(fields: [categoryId], references: [id])
+  matches  Match[]
+
+  @@unique([siteId, externalId]) // Composite key
+  @@index([siteId])
+  @@index([categoryId])
+  @@index([isActive, isExpired])
+  @@index([scrapedAt])
+  @@map("articles")
+}
+
+// ===== EXTENSION TABLES (Site-Specific Fields) =====
+// NO @relation decorator - Application layer only (Wrapper pattern)
+
+model ArticleDealabs {
+  articleId String @id // Links to Article.id (NO @relation!)
+
+  // Community engagement
+  temperature       Int     @default(0) // Community heat score (-100 to 10000+)
+  commentCount      Int     @default(0)
+  communityVerified Boolean @default(false)
+
+  // Deal metadata (Dealabs-specific)
+  originalPrice      Float? // Strikethrough price for discounts
+  discountPercentage Float? // Calculated or extracted discount %
+  merchant           String? // Retailer name (Amazon, Fnac, etc.)
+
+  // Deal features
+  freeShipping Boolean   @default(false)
+  isCoupon     Boolean   @default(false)
+  expiresAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([temperature])
+  @@index([expiresAt])
+  @@map("article_dealabs")
+}
+
+model ArticleVinted {
+  articleId String @id // Links to Article.id
+
+  // Engagement metrics
+  favoriteCount Int     @default(0)
+  viewCount     Int     @default(0)
+  boosted       Boolean @default(false) // "Boosté" promotion badge
+
+  // Fashion/item metadata
+  brand     String? // Brand/manufacturer
+  size      String? // Size
+  color     String? // Color
+  condition String // "Neuf avec étiquette", "Très bon état", etc.
+
+  // Seller info
+  sellerName   String?
+  sellerRating Float?
+
+  // Vinted-specific pricing
+  buyerProtectionFee Float? // Vinted buyer protection fee
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([favoriteCount])
+  @@index([condition])
+  @@index([brand])
+  @@map("article_vinted")
+}
+
+model ArticleLeBonCoin {
+  articleId String @id // Links to Article.id
+
+  // Location details (LeBonCoin shows this prominently)
+  city       String?
+  postcode   String?
+  department String?
+  region     String?
+
+  // Seller type
+  proSeller  Boolean @default(false) // Professional vs private seller
+  sellerName String?
+
+  // Ad features
+  urgentFlag Boolean @default(false) // "Urgent" badge
+  topAnnonce Boolean @default(false) // Promoted listing
+
+  // Delivery
+  deliveryOptions String[] @default([]) // ['hand_delivery', 'shipping', 'pickup']
+  shippingCost    Float?
+
+  // Item condition
+  condition String? // "Neuf", "Très bon état", etc.
+
+  // Flexible attributes (category-specific fields)
+  attributes Json? // Structured metadata (rooms, surface, brand, model, etc.)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([urgentFlag])
+  @@index([proSeller])
+  @@index([city])
+  @@index([postcode])
+  @@map("article_leboncoin")
+}
+
+model Match {
+  id         String    @id @default(cuid())
+  filterId   String
+  articleId  String
+  score      Float     @default(0) // Relevance score
+  notified   Boolean   @default(false)
+  notifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  filter        Filter         @relation(fields: [filterId], references: [id], onDelete: Cascade)
+  article       Article        @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  notifications Notification[] // Back-reference for cascade deletion
+
+  @@unique([filterId, articleId])
+  @@index([notified])
+  @@map("matches")
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  matchId    String? // Optional foreign key to Match (only for DEAL_MATCH type)
+  type       String // 'DEAL_MATCH', 'SYSTEM', 'ALERT' (notification types)
+  subject    String?
+  content    Json
+  metadata   Json?
+  sent       Boolean   @default(false)
+  sentAt     DateTime?
+  failed     Boolean   @default(false)
+  failReason String?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match Match? @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([sent])
+  @@index([userId])
+  @@index([matchId])
+  @@index([isRead])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model ScheduledJob {
+  id         String @id @default(cuid())
+  categoryId String @unique // 1:1 relationship with Category
+
+  // Job Configuration
+  isActive Boolean @default(true)
+
+  // Execution constraints
+  maxRetries Int @default(3)
+  timeoutMs  Int @default(300000) // 5 minutes timeout
+
+  // Performance tracking
+  totalExecutions    Int       @default(0)
+  successfulRuns     Int       @default(0)
+  lastExecutionAt    DateTime?
+  lastSuccessAt      DateTime?
+  nextScheduledAt    DateTime?
+  avgExecutionTimeMs Int?
+
+  // Reference counting (how many filters use this category)
+  filterCount Int @default(0)
+
+  // URL Optimization
+  optimizedQuery        String? // Optimized query parameters for URL filtering
+  optimizationUpdatedAt DateTime? // When optimization was last computed
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  category     Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  scrapingJobs ScrapingJob[] // Execution history
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([filterCount])
+  @@map("scheduled_jobs")
+}
+
+model ScrapingJob {
+  id             String @id @default(cuid())
+  scheduledJobId String // Required reference to the job configuration that created this execution
+
+  // Execution Status
+  status      String    @default("pending") // pending, processing, completed, failed
+  attempts    Int       @default(0)
+  lastAttempt DateTime?
+  completedAt DateTime?
+  error       String?
+
+  // Execution Results
+  dealsFound      Int? // Number of deals found in this execution
+  dealsProcessed  Int? // Number of deals successfully processed
+  executionTimeMs Int? // Time taken for execution
+
+  // Metadata (for any additional execution-specific data)
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships - source, url, category accessible via scheduledJob.category
+  scheduledJob ScheduledJob @relation(fields: [scheduledJobId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([scheduledJobId])
+  @@index([createdAt])
+  @@index([completedAt])
+  @@map("scraping_jobs")
+}
+
+model Category {
+  id          String  @id @default(cuid())
+  slug        String  // URL-friendly identifier (KEPT for categoryPath)
+  name        String  // Display name
+  sourceUrl   String  // Original category page URL
+  level       Int     @default(1) // 1=main, 2=sub, 3=specific
+  description String?
+
+  // Site relationship (cascade delete when Site is deleted)
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  // Category hierarchy (self-referencing, cascade delete children)
+  parentId String?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Category[] @relation("CategoryHierarchy")
+
+  // Statistics
+  dealCount      Int      @default(0)
+  avgTemperature Float    @default(0)
+  popularBrands  String[]
+
+  // Monitoring
+  isActive     Boolean @default(true)
+  isSelectable Boolean @default(true) // Can users select this category? (false for synthetic navigation-only categories like Vinted main tabs)
+  userCount    Int     @default(0) // Users monitoring this category
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  articles     Article[]        // One-to-many with Articles
+  filters      FilterCategory[] // Many-to-many with Filters
+  scheduledJob ScheduledJob?    // One scheduled job per category (1:1)
+
+  @@unique([siteId, sourceUrl]) // Unique per site
+  @@index([siteId])
+  @@index([parentId])
+  @@index([level])
+  @@map("categories")
+}
+
+// Junction table for many-to-many relationship between Filters and Categories
+model FilterCategory {
+  filterId   String
+  categoryId String
+
+  filter   Filter   @relation(fields: [filterId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([filterId, categoryId])
+  @@map("filter_categories")
+}

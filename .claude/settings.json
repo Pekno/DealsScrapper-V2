@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm clean:*)",
+      "Bash(pnpm build:services:test)",
+      "Bash(pnpm test:infra:start)",
+      "Bash(pnpm add:*)",
+      "Bash(ls scripts/*.sh)",
+      "Bash(netstat -ano)",
+      "Bash(tasklist)",
+      "Bash(curl -sf http://localhost:3001/health/ready)",
+      "Bash(curl -sf http://localhost:3002/health/ready)",
+      "Bash(curl -sf http://localhost:3003/health/ready)",
+      "Bash(curl -sf http://localhost:3004/health/ready)",
+      "Bash(bash scripts/services-stop.sh)",
+      "Bash(bash scripts/services-start.sh test)",
+      "Bash(curl -sf http://localhost:3000)",
+      "Bash(tasklist //FI \"PID eq 41500\")",
+      "Bash(tasklist /FI \"PID eq 41500\")",
+      "Bash(grep -r dotenv apps/*/src/main.ts packages/*/src/*.ts)",
+      "Bash(node --env-file=../../.env.test ./node_modules/.bin/jest --forceExit --detectOpenHandles --verbose --testPathPattern=\"health\")",
+      "Bash(head -5 echo --- ls apps/scheduler/node_modules/.bin/jest*)",
+      "Read(//c/Users/Pekno/Documents/dealscrapper_v2/apps/scheduler/**)",
+      "Bash(node --env-file=../../.env.test ../../node_modules/jest/bin/jest.js --forceExit --detectOpenHandles --verbose --testPathPattern=\"health\")",
+      "Bash(node --env-file=../../.env.test ../../node_modules/jest/bin/jest.js --forceExit --detectOpenHandles --verbose)",
+      "Bash(node --env-file=../../.env.test ../../node_modules/prisma/build/index.js db push)",
+      "Bash(pnpm build:services)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm test:scheduler:unit)",
+      "Bash(find apps/scheduler/dist -name *.js)",
+      "Bash(pnpm run:*)",
+      "Bash(bash /c/Users/Pekno/Documents/dealscrapper_v2/scripts/services-stop.sh)",
+      "Bash(pnpm type-check:*)",
+      "Bash(docker exec:*)",
+      "Bash(npx tsx:*)",
+      "Bash(pnpm cli:*)",
+      "Bash(npx jest:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # Test PostgreSQL Database
+  postgres-test:
+    image: postgres:15-alpine
+    container_name: dealscrapper-postgres-test
+    environment:
+      POSTGRES_DB: dealscrapper_test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d dealscrapper_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # Test Redis
+  redis-test:
+    image: redis:7-alpine
+    container_name: dealscrapper-redis-test
+    ports:
+      - "6380:6379"  # Different port to avoid conflicts
+    volumes:
+      - redis_test_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # Test Elasticsearch (if using)
+  elasticsearch-test:
+    image: elasticsearch:8.8.0
+    container_name: dealscrapper-es-test
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9201:9200"  # Different port to avoid conflicts
+    volumes:
+      - es_test_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=60s"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - test-network
+
+  # Test message broker (if using RabbitMQ instead of Redis)
+  rabbitmq-test:
+    image: rabbitmq:3.12-management-alpine
+    container_name: dealscrapper-rabbitmq-test
+    environment:
+      RABBITMQ_DEFAULT_USER: test
+      RABBITMQ_DEFAULT_PASS: test
+    ports:
+      - "5673:5672"   # AMQP port
+      - "15673:15672" # Management UI port
+    volumes:
+      - rabbitmq_test_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - test-network
+
+volumes:
+  postgres_test_data:
+  redis_test_data:
+  es_test_data:
+  rabbitmq_test_data:
+
+networks:
+  test-network:
+    driver: bridge

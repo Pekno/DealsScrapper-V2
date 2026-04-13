@@ -1,0 +1,302 @@
+name: dealscrapper-prod
+
+# Common scraper configuration (YAML anchor)
+x-scraper-common: &scraper-common
+  image: ghcr.io/pekno/dealsscrapper-v2/scraper:latest
+  restart: unless-stopped
+  deploy:
+    replicas: 1
+    update_config:
+      parallelism: 1
+      delay: 10s
+      order: start-first
+    restart_policy:
+      condition: on-failure
+      delay: 5s
+      max_attempts: 3
+    resources:
+      limits:
+        memory: 4G
+      reservations:
+        memory: 2G
+  depends_on:
+    api:
+      condition: service_healthy
+    elasticsearch:
+      condition: service_healthy
+  networks:
+    - dealscrapper-network
+
+# Common environment variables (YAML anchor)
+x-scraper-env: &scraper-env
+  NODE_ENV: production
+  PORT: 3002
+  SCRAPER_PORT: 3002
+  APP_VERSION: ${SCRAPER_VERSION:-${APP_VERSION:-1.0.0}}
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_DB: 1
+  REDIS_PASSWORD: ${REDIS_PASSWORD}
+  ELASTICSEARCH_NODE: http://elasticsearch:9200
+  SCRAPING_USER_AGENT: ${SCRAPING_USER_AGENT:-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36}
+  SCRAPING_TIMEOUT: ${SCRAPING_TIMEOUT:-30000}
+  SCRAPING_MAX_RETRIES: ${SCRAPING_MAX_RETRIES:-3}
+  RATE_LIMIT_DEALABS_REQUESTS_PER_HOUR: ${RATE_LIMIT_DEALABS_REQUESTS_PER_HOUR:-100}
+  RATE_LIMIT_DEALABS_CONCURRENT: ${RATE_LIMIT_DEALABS_CONCURRENT:-2}
+  PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+  PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
+  PUPPETEER_MAX_INSTANCES: ${PUPPETEER_MAX_INSTANCES:-2}
+  WORKER_MAX_CONCURRENT_JOBS: ${WORKER_MAX_CONCURRENT_JOBS:-3}
+  WORKER_MAX_MEMORY_MB: ${WORKER_MAX_MEMORY_MB:-4096}
+  PAGES_PER_CATEGORY: ${PAGES_PER_CATEGORY:-5}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  SCHEDULER_URL: http://scheduler:3004
+  URL_OPTIMIZATION_ENABLED: ${URL_OPTIMIZATION_ENABLED:-true}
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dealscrapper-network
+
+  # Redis for queues and caching
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dealscrapper-network
+
+  # Elasticsearch for search
+  elasticsearch:
+    image: elasticsearch:9.0.3
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - "xpack.monitoring.collection.enabled=false"
+    volumes:
+      - elasticsearch_data_prod:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - dealscrapper-network
+
+  # API Service — runs migrations before starting, must be healthy before other services start
+  api:
+    image: ghcr.io/pekno/dealsscrapper-v2/api:latest
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-s", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - APP_NAME=${APP_NAME:-DealsScrapper}
+      - APP_VERSION=${API_VERSION:-${APP_VERSION:-1.0.0}}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=1
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-15m}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
+      - EMAIL_VERIFICATION_SECRET=${EMAIL_VERIFICATION_SECRET}
+      - EMAIL_VERIFICATION_EXPIRES_IN=${EMAIL_VERIFICATION_EXPIRES_IN:-24h}
+      - PASSWORD_RESET_SECRET=${PASSWORD_RESET_SECRET}
+      - PASSWORD_RESET_EXPIRES_IN=${PASSWORD_RESET_EXPIRES_IN:-1h}
+      - BCRYPT_ROUNDS=${BCRYPT_ROUNDS:-12}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-900000}
+      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-100}
+      - AUTH_RATE_LIMIT_WINDOW_MS=${AUTH_RATE_LIMIT_WINDOW_MS:-900000}
+      - AUTH_RATE_LIMIT_MAX_REQUESTS=${AUTH_RATE_LIMIT_MAX_REQUESTS:-5}
+      - CORS_ORIGIN=http://${PUBLIC_HOST:-localhost}:3000
+      - WEB_APP_URL=http://${PUBLIC_HOST:-localhost}:3000
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - SCHEDULER_URL=http://scheduler:3004
+      - NOTIFIER_URL=http://notifier:3003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - dealscrapper-network
+
+  # Site-Dedicated Scraper Services
+  # Each scraper instance processes jobs only for its assigned site
+  # This ensures parallel processing across sites without job contention
+
+  # Dealabs Scraper - processes only Dealabs jobs
+  scraper-dealabs:
+    <<: *scraper-common
+    environment:
+      <<: *scraper-env
+      SCRAPER_SITE: dealabs
+      WORKER_ID: worker-dealabs
+      WORKER_ENDPOINT: http://scraper-dealabs:3002
+
+  # Vinted Scraper - processes only Vinted jobs
+  scraper-vinted:
+    <<: *scraper-common
+    environment:
+      <<: *scraper-env
+      SCRAPER_SITE: vinted
+      WORKER_ID: worker-vinted
+      WORKER_ENDPOINT: http://scraper-vinted:3002
+
+  # LeBonCoin Scraper - processes only LeBonCoin jobs
+  scraper-leboncoin:
+    <<: *scraper-common
+    environment:
+      <<: *scraper-env
+      SCRAPER_SITE: leboncoin
+      WORKER_ID: worker-leboncoin
+      WORKER_ENDPOINT: http://scraper-leboncoin:3002
+
+  # Notifier Service
+  notifier:
+    image: ghcr.io/pekno/dealsscrapper-v2/notifier:latest
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=production
+      - NOTIFIER_PORT=3003
+      - APP_NAME=${APP_NAME:-DealsScrapper}
+      - APP_VERSION=${NOTIFIER_VERSION:-${APP_VERSION:-1.0.0}}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=1
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-24h}
+      - WEB_APP_URL=http://${PUBLIC_HOST:-localhost}:3000
+      - WEBSOCKET_NAMESPACE=${WEBSOCKET_NAMESPACE:-/notifications}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Email sender configuration (required for all modes)
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-mailhog}
+      - FROM_EMAIL=${FROM_EMAIL:-noreply@dealscrapper.com}
+      - FROM_NAME=${FROM_NAME:-DealsScrapper}
+      - BRAND_PRIMARY_COLOR=${BRAND_PRIMARY_COLOR:-#3B82F6}
+      - SUPPORT_EMAIL=${SUPPORT_EMAIL:-support@dealscrapper.com}
+      # Gmail OAuth2 configuration (production email provider)
+      # Note: Do NOT set EMAIL_HOST for Gmail OAuth - it auto-detects based on GMAIL_* vars
+      - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID}
+      - GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET}
+      - GMAIL_REFRESH_TOKEN=${GMAIL_REFRESH_TOKEN}
+      - GMAIL_USER_EMAIL=${GMAIL_USER_EMAIL}
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - dealscrapper-network
+
+  # Scheduler Service
+  scheduler:
+    image: ghcr.io/pekno/dealsscrapper-v2/scheduler:latest
+    restart: unless-stopped
+    # No external ports - internal access only
+    environment:
+      - NODE_ENV=production
+      - SCHEDULER_PORT=3004
+      - APP_VERSION=${SCHEDULER_VERSION:-${APP_VERSION:-1.0.0}}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=1
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - NOTIFIER_SERVICE_URL=http://notifier:3003
+      - MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-3}
+      - JOB_TIMEOUT=${JOB_TIMEOUT:-300000}
+      - URL_OPTIMIZATION_ENABLED=${URL_OPTIMIZATION_ENABLED:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      api:
+        condition: service_healthy
+      scraper-dealabs:
+        condition: service_started
+      scraper-vinted:
+        condition: service_started
+      scraper-leboncoin:
+        condition: service_started
+      notifier:
+        condition: service_started
+    networks:
+      - dealscrapper-network
+
+  # Web Frontend Service
+  # URLs are browser-facing (injected into the SPA at serve time).
+  # They are derived from PUBLIC_HOST and must be reachable from the user's browser.
+  web:
+    image: ghcr.io/pekno/dealsscrapper-v2/web:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - API_URL=http://${PUBLIC_HOST:-localhost}:3001
+      - WS_URL=ws://${PUBLIC_HOST:-localhost}:3003
+      - NOTIFIER_URL=http://${PUBLIC_HOST:-localhost}:3003
+      - SCRAPER_URL=http://${PUBLIC_HOST:-localhost}:3002
+      - SCHEDULER_URL=http://${PUBLIC_HOST:-localhost}:3004
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - dealscrapper-network
+
+volumes:
+  postgres_data_prod:
+    driver: local
+  redis_data_prod:
+    driver: local
+  elasticsearch_data_prod:
+    driver: local
+
+networks:
+  dealscrapper-network:
+    driver: bridge

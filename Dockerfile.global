@@ -1,0 +1,83 @@
+# Stage 1: Base
+FROM node:20-alpine AS base
+ARG PNPM_VERSION=10.12.4
+ARG TURBO_VERSION=latest
+RUN npm install -g pnpm@${PNPM_VERSION} turbo@${TURBO_VERSION}
+RUN apk add --no-cache \
+    libc6-compat
+WORKDIR /app
+
+# Stage 2: Pruner
+FROM base AS pruner
+WORKDIR /app
+ARG SERVICE
+COPY . .
+RUN turbo prune @dealscrapper/${SERVICE} --docker
+
+# Stage 3: Builder
+FROM base AS builder
+WORKDIR /app
+ARG SERVICE
+
+COPY --from=pruner /app/out/json/ .
+COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=pruner /app/tsconfig.base.json ./tsconfig.base.json
+
+# Install all dependencies (needed for building) but skip Cypress binary download
+# Cypress is only needed for E2E tests in CI, not for building services
+ENV CYPRESS_INSTALL_BINARY=0
+RUN pnpm install --frozen-lockfile --prefer-offline
+
+COPY --from=pruner /app/out/full/ .
+
+# Build the service
+RUN pnpm turbo build --filter=@dealscrapper/${SERVICE}
+
+# Cleanup: remove src folders and dev dependencies
+RUN rm -rf apps/${SERVICE}/src packages/*/src
+RUN pnpm prune --prod
+
+# Stage 4: Runner
+FROM node:20-alpine3.21 AS runner
+ARG SERVICE
+WORKDIR /app/apps/${SERVICE}
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ttf-freefont \
+    ca-certificates \
+    curl
+RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
+ENV NODE_PATH=/app/node_modules
+# Specific for Scraper
+# Tell Puppeteer to skip installing Chromium. We'll be using the installed package.
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+COPY --from=builder --chown=nestjs:nodejs /app /app
+
+# Create test fixtures directory for scraper service (for volume mounting in test environment)
+RUN if [ "$SERVICE" = "scraper" ]; then \
+    mkdir -p /app/apps/scraper/test/fixtures && \
+    chown -R nestjs:nodejs /app/apps/scraper/test; \
+    fi
+
+# Conditional CMD based on service type - Create startup script with correct path
+# For Next.js web service, use "npm start" (which runs "next start")
+# For NestJS services, use "node dist/main.js"
+# For scraper service, cap heap at 1536MB to leave ~512MB for Chromium within the 2GB container limit
+RUN if [ "$SERVICE" = "web" ]; then \
+    printf '#!/bin/sh\ncd /app/apps/web && npm start\n' > /app/apps/${SERVICE}/start.sh; \
+    elif [ "$SERVICE" = "api" ]; then \
+    printf '#!/bin/sh\necho "Running database migrations..."\nnode /app/node_modules/.bin/prisma migrate deploy --schema /app/packages/database/prisma/schema.prisma\necho "Migrations complete."\ncd /app/apps/api && node dist/main.js\n' > /app/apps/${SERVICE}/start.sh; \
+    elif [ "$SERVICE" = "scraper" ]; then \
+    printf '#!/bin/sh\nexport NODE_OPTIONS="--max-old-space-size=3072"\nnode dist/main.js\n' > /app/apps/${SERVICE}/start.sh; \
+    else \
+    printf '#!/bin/sh\nnode dist/main.js\n' > /app/apps/${SERVICE}/start.sh; \
+    fi && \
+    chmod +x /app/apps/${SERVICE}/start.sh && \
+    chown nestjs:nodejs /app/apps/${SERVICE}/start.sh
+
+USER nestjs
+CMD ["./start.sh"]

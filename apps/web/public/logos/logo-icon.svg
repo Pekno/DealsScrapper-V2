@@ -1,0 +1,24 @@
+<svg width="500" height="500" viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <mask id="funnel-gap-fixed">
+    <rect x="0" y="0" width="500" height="500" fill="white" />
+    <rect x="140" y="190" width="220" height="12" fill="black" />
+  </mask>
+  
+  <g transform="translate(25, 30)">
+    <circle cx="225" cy="220" r="145" stroke="#2563EB" stroke-width="38"/>
+    
+    <path d="M330 325L410 405" stroke="#2563EB" stroke-width="38" stroke-linecap="round"/>
+    
+    <g mask="url(#funnel-gap-fixed)">
+      <path d="M145 160H305L240 255V310L210 290V255L145 160Z" 
+            fill="#3B82F6" 
+            stroke="#3B82F6" 
+            stroke-width="12" 
+            stroke-linejoin="round" 
+            stroke-linecap="round"/>
+    </g>
+    
+    <path d="M385 40L397 65L422 77L397 89L385 114L373 89L348 77L373 65L385 40Z" fill="#3B82F6"/>
+    <path d="M445 105L452 120L467 127L452 134L445 149L438 134L423 127L438 120L445 105Z" fill="#3B82F6"/>
+  </g>
+</svg>

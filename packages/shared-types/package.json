@@ -1,0 +1,68 @@
+{
+  "name": "@dealscrapper/shared-types",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./enums": {
+      "types": "./dist/enums.d.ts",
+      "default": "./dist/enums.js"
+    },
+    "./deals": {
+      "types": "./dist/deals.d.ts",
+      "default": "./dist/deals.js"
+    },
+    "./scraping": {
+      "types": "./dist/scraping.d.ts",
+      "default": "./dist/scraping.js"
+    },
+    "./filtering": {
+      "types": "./dist/filtering.d.ts",
+      "default": "./dist/filtering.js"
+    },
+    "./sites": {
+      "types": "./dist/sites/index.d.ts",
+      "default": "./dist/sites/index.js"
+    },
+    "./sites/field-definitions": {
+      "types": "./dist/sites/field-definitions/index.d.ts",
+      "default": "./dist/sites/field-definitions/index.js"
+    },
+    "./sites/filter-rules": {
+      "types": "./dist/sites/filter-rules/index.d.ts",
+      "default": "./dist/sites/filter-rules/index.js"
+    },
+    "./sites/table-columns": {
+      "types": "./dist/sites/table-columns/index.d.ts",
+      "default": "./dist/sites/table-columns/index.js"
+    },
+    "./article": {
+      "types": "./dist/article/index.d.ts",
+      "default": "./dist/article/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch --preserveWatchOutput",
+    "clean": "shx rm -rf dist tsconfig.tsbuildinfo",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "dependencies": {
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@dealscrapper/database": "workspace:*",
+    "typescript": "^5.8.3"
+  }
+}
