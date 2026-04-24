@@ -14,10 +14,12 @@ import type {
   BrandingConfig,
   RateLimitConfig,
   CorsConfig,
+  OllamaConfig,
 } from './interfaces/config.interface.js';
 import {
   DEFAULT_REDIS_CONFIG,
   defaultRedisRetryStrategy,
+  DEFAULT_OLLAMA_CONFIG,
 } from './interfaces/config.interface.js';
 
 /**
@@ -330,6 +332,28 @@ export class SharedConfigService {
     const corsOrigin = this.get<string>('CORS_ORIGIN');
     return {
       origins: corsOrigin.split(',').map((origin) => origin.trim()),
+    };
+  }
+
+  // === COMPUTED OLLAMA CONFIG ===
+
+  /**
+   * Get Ollama LLM configuration
+   * Used by the extractor service to reach its Ollama backend
+   * @returns Ollama configuration object
+   */
+  getOllamaConfig(): OllamaConfig {
+    return {
+      url: this.get<string>('OLLAMA_URL'),
+      model:
+        this.configService.get<string>('OLLAMA_MODEL') ??
+        DEFAULT_OLLAMA_CONFIG.model,
+      concurrency:
+        this.configService.get<number>('LLM_CONCURRENCY') ??
+        DEFAULT_OLLAMA_CONFIG.concurrency,
+      timeoutMs:
+        this.configService.get<number>('LLM_TIMEOUT_MS') ??
+        DEFAULT_OLLAMA_CONFIG.timeoutMs,
     };
   }
 

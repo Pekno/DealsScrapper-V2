@@ -1,24 +1,56 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DealabsAdapter } from '../dealabs.adapter';
 import { DealabsUrlOptimizer } from '../dealabs-url-optimizer';
-import { FieldExtractorService } from '../../../field-extraction/field-extractor.service';
+import { DealabsExpiryResolver } from '../dealabs-expiry-resolver';
+import { LlmExtractionService } from '../../../llm-extraction/llm-extraction.service';
 import { SiteSource } from '@dealscrapper/shared-types';
+import type { UniversalListing } from '@dealscrapper/shared-types';
+
+const mockUniversalListing: UniversalListing = {
+  externalId: '3297895',
+  title: 'Apple MacBook Air M2',
+  description: 'MacBook Air with M2 chip',
+  url: 'https://www.dealabs.com/bons-plans/apple-macbook-air-m2-3297895',
+  imageUrl: 'https://static.dealabs.com/threads/raw/f5y/3297895_1/re720x720.jpg',
+  siteId: SiteSource.DEALABS,
+  currentPrice: 99900,
+  originalPrice: 119900,
+  merchant: 'Amazon',
+  location: null,
+  publishedAt: new Date('2024-01-15T10:30:00+01:00'),
+  isActive: true,
+  categorySlug: 'high-tech',
+  siteSpecificData: {
+    type: SiteSource.DEALABS,
+    temperature: 425,
+    commentCount: 42,
+    communityVerified: false,
+    freeShipping: false,
+    isCoupon: false,
+    discountPercentage: 17,
+    expiresAt: null,
+  },
+};
 
 describe('DealabsAdapter', () => {
   let adapter: DealabsAdapter;
-  let fieldExtractor: FieldExtractorService;
+  let llmExtractionService: jest.Mocked<LlmExtractionService>;
 
   beforeEach(async () => {
+    llmExtractionService = {
+      extract: jest.fn().mockResolvedValue(mockUniversalListing),
+    } as unknown as jest.Mocked<LlmExtractionService>;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DealabsAdapter,
         DealabsUrlOptimizer,
-        FieldExtractorService,
+        DealabsExpiryResolver,
+        { provide: LlmExtractionService, useValue: llmExtractionService },
       ],
     }).compile();
 
     adapter = module.get<DealabsAdapter>(DealabsAdapter);
-    fieldExtractor = module.get<FieldExtractorService>(FieldExtractorService);
   });
 
   it('should be defined', () => {
@@ -49,159 +81,138 @@ describe('DealabsAdapter', () => {
 
   describe('buildCategoryUrl()', () => {
     it('should build regular category URL', () => {
-      const url = adapter.buildCategoryUrl('high-tech', 1);
-      expect(url).toBe('https://www.dealabs.com/groupe/high-tech?page=1');
+      expect(adapter.buildCategoryUrl('high-tech', 1)).toBe(
+        'https://www.dealabs.com/groupe/high-tech?page=1',
+      );
     });
 
     it('should build hub category URL', () => {
-      const url = adapter.buildCategoryUrl('hub-gaming', 2);
-      expect(url).toBe('https://www.dealabs.com/groupe/hub/gaming?page=2');
+      expect(adapter.buildCategoryUrl('hub-gaming', 2)).toBe(
+        'https://www.dealabs.com/groupe/hub/gaming?page=2',
+      );
     });
 
-    it('should handle default page number', () => {
-      const url = adapter.buildCategoryUrl('high-tech');
-      expect(url).toBe('https://www.dealabs.com/groupe/high-tech?page=1');
+    it('should default to page 1', () => {
+      expect(adapter.buildCategoryUrl('high-tech')).toBe(
+        'https://www.dealabs.com/groupe/high-tech?page=1',
+      );
     });
   });
 
   describe('extractCategorySlug()', () => {
     it('should extract regular category slug', () => {
-      const slug = adapter.extractCategorySlug(
-        'https://www.dealabs.com/groupe/high-tech?page=1',
-      );
-      expect(slug).toBe('high-tech');
+      expect(
+        adapter.extractCategorySlug('https://www.dealabs.com/groupe/high-tech?page=1'),
+      ).toBe('high-tech');
     });
 
     it('should extract hub category slug', () => {
-      const slug = adapter.extractCategorySlug(
-        'https://www.dealabs.com/groupe/hub/gaming?page=1',
-      );
-      expect(slug).toBe('hub-gaming');
+      expect(
+        adapter.extractCategorySlug('https://www.dealabs.com/groupe/hub/gaming?page=1'),
+      ).toBe('hub-gaming');
     });
 
-    it('should throw error for invalid URL', () => {
-      expect(() => {
-        adapter.extractCategorySlug('https://www.dealabs.com/invalid');
-      }).toThrow('Cannot extract category slug');
+    it('should throw for invalid URL', () => {
+      expect(() =>
+        adapter.extractCategorySlug('https://www.dealabs.com/invalid'),
+      ).toThrow('Cannot extract category slug');
     });
   });
 
   describe('getListingSelector()', () => {
     it('should return correct selector', () => {
-      const selector = adapter.getListingSelector();
-      expect(selector).toBe('article.thread, article[data-thread-id], article[id^="thread_"]');
+      expect(adapter.getListingSelector()).toBe(
+        'article.thread, article[data-thread-id], article[id^="thread_"]',
+      );
     });
   });
 
   describe('extractListings()', () => {
-    it('should extract listings from HTML fixture', () => {
+    it('should call LlmExtractionService.extract for each listing element and return results', async () => {
       const html = `
         <div>
           <article class="thread" data-thread-id="thread_123">
-            <a class="thread-link--title" href="/bons-plans/test-deal">Test Deal</a>
-            <span class="thread-price">€99.99</span>
-            <button class="cept-vote-temp">150°</button>
-            <a data-t="commentsLink">42 commentaires</a>
-            <img class="thread-image" src="/image.jpg" />
-            <span class="thread-merchant">Amazon</span>
-            <span class="chip span">il y a 2h</span>
+            <a href="/bons-plans/test-123">Test Deal 1</a>
           </article>
           <article class="thread" data-thread-id="thread_456">
-            <a class="thread-link--title" href="/bons-plans/another-deal">Another Deal</a>
-            <span class="thread-price">€49.99</span>
-            <button class="cept-vote-temp">200°</button>
-            <a data-t="commentsLink">10 commentaires</a>
+            <a href="/bons-plans/test-456">Test Deal 2</a>
           </article>
         </div>
       `;
-
-      const sourceUrl = 'https://www.dealabs.com/groupe/high-tech?page=1';
-      const listings = adapter.extractListings(html, sourceUrl);
-
+      const listings = await adapter.extractListings(
+        html,
+        'https://www.dealabs.com/groupe/high-tech',
+      );
+      expect(llmExtractionService.extract).toHaveBeenCalledTimes(2);
       expect(listings).toHaveLength(2);
-      expect(listings[0].externalId).toBe('123');
-      expect(listings[0].title).toBe('Test Deal');
-      expect(listings[0].source).toBe(SiteSource.DEALABS);
-      expect(listings[0].categorySlug).toBe('high-tech');
-      expect(listings[0].siteSpecificData.type).toBe('dealabs');
+      expect(listings[0]).toEqual(mockUniversalListing);
     });
 
-    it('should handle empty HTML', () => {
-      const html = '<div></div>';
-      const sourceUrl = 'https://www.dealabs.com/groupe/high-tech?page=1';
-
-      const listings = adapter.extractListings(html, sourceUrl);
-
+    it('should return empty array for HTML with no matching elements', async () => {
+      const listings = await adapter.extractListings(
+        '<div data-thread-id="x"></div>',
+        'https://www.dealabs.com/groupe/high-tech',
+      );
       expect(listings).toHaveLength(0);
+      expect(llmExtractionService.extract).not.toHaveBeenCalled();
     });
 
-    it('should skip invalid listings', () => {
+    it('should skip listings where LLM extraction fails', async () => {
+      llmExtractionService.extract.mockRejectedValueOnce(new Error('LLM error'));
+
       const html = `
         <div>
-          <article class="thread" data-thread-id="thread_123">
-            <!-- Missing required fields -->
-          </article>
-          <article class="thread" data-thread-id="thread_456">
-            <a class="thread-link--title" href="/bons-plans/valid-deal">Valid Deal</a>
-          </article>
+          <article class="thread" data-thread-id="thread_123">content</article>
+          <article class="thread" data-thread-id="thread_456">content</article>
         </div>
       `;
-
-      const sourceUrl = 'https://www.dealabs.com/groupe/high-tech?page=1';
-      const listings = adapter.extractListings(html, sourceUrl);
-
-      // Only valid listing should be extracted
-      expect(listings.length).toBeLessThanOrEqual(1);
+      const listings = await adapter.extractListings(
+        html,
+        'https://www.dealabs.com/groupe/high-tech',
+      );
+      expect(listings).toHaveLength(1);
     });
   });
 
   describe('validateHtml()', () => {
-    it('should validate valid Dealabs HTML with data-thread-id', () => {
-      const html = '<div class="threadGrid"><article data-thread-id="123"></article></div>';
-
-      expect(() => {
-        adapter.validateHtml(html);
-      }).not.toThrow();
+    it('should accept HTML with data-thread-id', () => {
+      expect(() =>
+        adapter.validateHtml(
+          '<div class="threadGrid"><article data-thread-id="123"></article></div>',
+        ),
+      ).not.toThrow();
     });
 
-    it('should validate valid Dealabs HTML with id="thread_" pattern', () => {
-      const html = '<article id="thread_3297895" class="thread cept-thread-item thread--newCard"></article>';
-
-      expect(() => {
-        adapter.validateHtml(html);
-      }).not.toThrow();
+    it('should accept HTML with id="thread_" pattern', () => {
+      expect(() =>
+        adapter.validateHtml(
+          '<article id="thread_3297895" class="thread cept-thread-item"></article>',
+        ),
+      ).not.toThrow();
     });
 
-    it('should throw error for empty HTML', () => {
-      expect(() => {
-        adapter.validateHtml('');
-      }).toThrow('Empty HTML content');
+    it('should throw for empty HTML', () => {
+      expect(() => adapter.validateHtml('')).toThrow('Empty HTML content');
     });
 
-    it('should throw error for invalid structure', () => {
-      const html = '<div>Random content without thread markers</div>';
-
-      expect(() => {
-        adapter.validateHtml(html);
-      }).toThrow('Invalid Dealabs HTML structure');
+    it('should throw for HTML without thread markers', () => {
+      expect(() =>
+        adapter.validateHtml('<div>Random content without thread markers</div>'),
+      ).toThrow('Invalid Dealabs HTML structure');
     });
   });
 
   describe('extractElementCount()', () => {
     it('should extract element count from HTML', () => {
-      const html = '<div class="threadGrid-headerMeta">123 deals trouvés</div>';
-
-      const count = adapter.extractElementCount(html);
-
-      expect(count).toBe(123);
+      expect(
+        adapter.extractElementCount(
+          '<div class="threadGrid-headerMeta">123 deals trouvés</div>',
+        ),
+      ).toBe(123);
     });
 
     it('should return undefined if count not found', () => {
-      const html = '<div>No count here</div>';
-
-      const count = adapter.extractElementCount(html);
-
-      expect(count).toBeUndefined();
+      expect(adapter.extractElementCount('<div>No count here</div>')).toBeUndefined();
     });
   });
 });

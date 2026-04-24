@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import type { CheerioAPI, Cheerio } from 'cheerio';
 import type { Element } from 'domhandler';
@@ -6,14 +6,14 @@ import { SiteSource } from '@dealscrapper/shared-types';
 import type {
   ISiteAdapter,
   UniversalListing,
-  DealabsData,
 } from '../base/site-adapter.interface.js';
 import type { IUrlOptimizer } from '../base/url-optimizer.interface.js';
 import type { IExpiryResolver } from '../base/expiry-resolver.interface.js';
 import { DealabsUrlOptimizer } from './dealabs-url-optimizer.js';
 import { DealabsExpiryResolver } from './dealabs-expiry-resolver.js';
-import { FieldExtractorService } from '../../field-extraction/field-extractor.service.js';
-import { dealabsFieldConfig } from './dealabs.field-config.js';
+import { createServiceLogger } from '@dealscrapper/shared-logging';
+import { scraperLogConfig } from '../../config/logging.config.js';
+import { LlmExtractionService } from '../../llm-extraction/llm-extraction.service.js';
 
 @Injectable()
 export class DealabsAdapter implements ISiteAdapter {
@@ -24,148 +24,81 @@ export class DealabsAdapter implements ISiteAdapter {
   readonly urlOptimizer: IUrlOptimizer;
   readonly expiryResolver: IExpiryResolver;
 
-  private readonly logger = new Logger(DealabsAdapter.name);
+  private readonly logger = createServiceLogger(scraperLogConfig);
 
   constructor(
-    private readonly fieldExtractor: FieldExtractorService,
     dealabsUrlOptimizer: DealabsUrlOptimizer,
     dealabsExpiryResolver: DealabsExpiryResolver,
+    private readonly llmExtraction: LlmExtractionService,
   ) {
     this.urlOptimizer = dealabsUrlOptimizer;
     this.expiryResolver = dealabsExpiryResolver;
   }
 
   /**
-   * Extracts listings from Dealabs HTML page.
+   * Extracts listings from Dealabs HTML page by delegating per-element
+   * extraction to the extractor microservice.
    */
-  extractListings(html: string, sourceUrl: string): UniversalListing[] {
+  async extractListings(html: string, sourceUrl: string): Promise<UniversalListing[]> {
     this.validateHtml(html);
 
     const $ = cheerio.load(html);
     const selector = this.getListingSelector();
 
+    const elements: Cheerio<Element>[] = [];
+    $(selector).each((_index, element) => {
+      elements.push($(element) as Cheerio<Element>);
+    });
+
+    const results = await Promise.allSettled(
+      elements.map(($element, index) =>
+        this.extractSingleListing($, $element, sourceUrl, index),
+      ),
+    );
+
     const listings: UniversalListing[] = [];
     let failedCount = 0;
 
-    $(selector).each((index, element) => {
-      try {
-        const listing = this.extractSingleListing($, $(element) as Cheerio<Element>, sourceUrl);
-        if (listing) {
-          listings.push(listing);
-        }
-      } catch (error) {
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value !== null) {
+        listings.push(result.value);
+      } else {
         failedCount++;
-        const errorMsg = (error as Error).message || 'Unknown error';
-        const $el = $(element);
-        const threadId = $el.attr('data-thread-id') || 'unknown';
-        const outerHtmlSnippet = $el.toString().slice(0, 200);
-
-        this.logger.warn(
-          `⚠️ Failed to extract Dealabs listing [${index}] (thread-id: ${threadId}):\n` +
-          `   💥 Error: ${errorMsg}\n` +
-          `   📄 HTML snippet: ${outerHtmlSnippet}...`,
-        );
       }
-    });
+    }
 
     if (failedCount > 0) {
-      this.logger.warn(`⚠️ Failed to extract ${failedCount} of ${failedCount + listings.length} Dealabs listings`);
+      this.logger.warn(`Failed to extract ${failedCount} of ${failedCount + listings.length} Dealabs listings`);
     }
-    this.logger.log(`✅ Extracted ${listings.length} Dealabs listings from ${sourceUrl}`);
+    this.logger.log(`Extracted ${listings.length} Dealabs listings from ${sourceUrl}`);
     return listings;
   }
 
   /**
-   * Extracts a single listing from Dealabs card element.
+   * Delegates extraction of a single listing element to the extractor service
+   * and normalizes the response into a UniversalListing.
    */
-  private extractSingleListing(
+  private async extractSingleListing(
     $: CheerioAPI,
     $element: Cheerio<Element>,
     sourceUrl: string,
-  ): UniversalListing | null {
+    index: number,
+  ): Promise<UniversalListing | null> {
+    const threadId = $element.attr('data-thread-id') ?? $element.attr('id') ?? 'unknown';
     try {
-      // Extract all fields using declarative config
-      const extracted = this.fieldExtractor.extract($, $element, dealabsFieldConfig, {
-        siteId: this.siteId,
-        siteBaseUrl: this.baseUrl,
-        $element,
+      const listing = await this.llmExtraction.extract({
+        siteId: SiteSource.DEALABS,
+        listingHtml: $.html($element),
         sourceUrl,
       });
-
-      // Validate required fields
-      if (!extracted.externalId || !extracted.title || !extracted.url) {
-        throw new Error('Missing required fields (externalId, title, or url)');
-      }
-
-      // Extract category slug from source URL
-      const categorySlug = this.extractCategorySlug(sourceUrl);
-
-      // Build universal listing
-      const listing: UniversalListing = {
-        externalId: String(extracted.externalId),
-        title: String(extracted.title),
-        description: extracted.description ? String(extracted.description) : null,
-        url: String(extracted.url),
-        imageUrl: extracted.imageUrl ? String(extracted.imageUrl) : null,
-        siteId: this.siteId,
-        currentPrice:
-          typeof extracted.currentPrice === 'number' ? extracted.currentPrice : null,
-        originalPrice:
-          typeof extracted.originalPrice === 'number'
-            ? extracted.originalPrice
-            : null,
-        merchant: extracted.merchant ? String(extracted.merchant) : null,
-        location: null, // Dealabs doesn't display location
-        publishedAt:
-          extracted.publishedAt instanceof Date
-            ? extracted.publishedAt
-            : new Date(),
-        isActive: true,
-        categorySlug,
-        siteSpecificData: this.buildDealabsData(extracted),
-      };
-
       return listing;
     } catch (error) {
       const errorMsg = (error as Error).message || 'Unknown error';
-      const errorStack = (error as Error).stack || '';
       this.logger.warn(
-        `⚠️ Failed to extract single Dealabs listing:\n` +
-        `   💥 Error: ${errorMsg}\n` +
-        `   🔗 Source URL: ${sourceUrl}\n` +
-        `   🔍 Stack: ${errorStack.split('\n').slice(0, 3).join('\n   ')}`,
+        `Failed to extract Dealabs listing [${index}] (thread-id: ${threadId}): ${errorMsg}`,
       );
       return null;
     }
-  }
-
-  /**
-   * Builds Dealabs-specific data object.
-   */
-  private buildDealabsData(extracted: Record<string, unknown>): DealabsData {
-    return {
-      type: SiteSource.DEALABS,
-      temperature:
-        typeof extracted.temperature === 'number' ? extracted.temperature : 0,
-      commentCount:
-        typeof extracted.commentCount === 'number' ? extracted.commentCount : 0,
-      communityVerified:
-        typeof extracted.communityVerified === 'boolean'
-          ? extracted.communityVerified
-          : false,
-      freeShipping:
-        typeof extracted.freeShipping === 'boolean'
-          ? extracted.freeShipping
-          : false,
-      isCoupon:
-        typeof extracted.isCoupon === 'boolean' ? extracted.isCoupon : false,
-      discountPercentage:
-        typeof extracted.discountPercentage === 'number'
-          ? extracted.discountPercentage
-          : null,
-      expiresAt:
-        extracted.expiresAt instanceof Date ? extracted.expiresAt : null,
-    };
   }
 
   /**

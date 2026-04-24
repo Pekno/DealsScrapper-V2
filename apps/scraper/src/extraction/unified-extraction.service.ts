@@ -62,7 +62,7 @@ export class UnifiedExtractionService {
       );
 
       // Extract listings from HTML
-      const listings = adapter.extractListings(html, optimizedUrl);
+      const listings = await adapter.extractListings(html, optimizedUrl);
 
       // Extract total count if available
       const totalCount = adapter.extractElementCount(html);

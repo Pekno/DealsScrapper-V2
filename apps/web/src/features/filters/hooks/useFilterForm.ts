@@ -4,9 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { useForm, UseFormReturn } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { useForm, UseFormReturn, Resolver } from 'react-hook-form';
 import {
   FilterRule,
   FilterRuleGroup,
@@ -16,119 +14,64 @@ import {
   UpdateFilterRequest,
 } from '@/features/filters/types/filter.types';
 
-// Form validation schema using Zod
-const createFilterSchema = z.object({
-  name: z
-    .string()
-    .min(1, 'Filter name is required')
-    .max(100, 'Filter name must be less than 100 characters'),
-  description: z
-    .string()
-    .max(500, 'Description must be less than 500 characters')
-    .optional(),
-  enabledSites: z
-    .array(z.string())
-    .min(1, 'At least one site must be selected')
-    .default(['dealabs']),
-  categories: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-        slug: z.string(),
-        siteId: z.string(), // 'dealabs' | 'vinted' | 'leboncoin'
-        sourceUrl: z.string(), // Original category page URL
-        parentId: z.string().nullable().optional(),
-        level: z.number(),
-        description: z.string().nullable().optional(),
-        dealCount: z.number(),
-        avgTemperature: z.number(),
-        popularBrands: z.array(z.string()),
-        isActive: z.boolean(),
-        userCount: z.number(),
-        createdAt: z.union([z.date(), z.string()]).transform((val) => {
-          if (typeof val === 'string') {
-            const date = new Date(val);
-            return isNaN(date.getTime()) ? new Date() : date;
-          }
-          return val instanceof Date ? val : new Date();
-        }),
-        updatedAt: z.union([z.date(), z.string()]).transform((val) => {
-          if (typeof val === 'string') {
-            const date = new Date(val);
-            return isNaN(date.getTime()) ? new Date() : date;
-          }
-          return val instanceof Date ? val : new Date();
-        }),
-        color: z.string().optional(),
-      })
-    )
-    .min(1, 'At least one category must be selected'),
-  rules: z
-    .array(
-      z.union([
-        // FilterRule
-        z.object({
-          field: z.string(),
-          operator: z.string(),
-          value: z.union([
-            z.string(),
-            z.number(),
-            z.boolean(),
-            z.array(z.string()),
-            z.array(z.number()),
-          ]),
-          weight: z.number().optional(),
-          caseSensitive: z.boolean().optional(),
-          siteSpecific: z.string().optional(),
-        }),
-        // FilterRuleGroup
-        z.object({
-          logic: z.enum(['AND', 'OR', 'NOT']),
-          rules: z.array(z.unknown()),
-          weight: z.number().optional(),
-        }),
-      ])
-    )
-    .min(1, 'At least one rule must be configured')
-    .refine(
-      (rules) => {
-        // Validate each rule
-        for (const rule of rules) {
-          // Skip rule groups (they have logic property)
-          if ('logic' in rule) continue;
+export interface CreateFilterFormData {
+  name: string;
+  description?: string;
+  enabledSites: string[];
+  categories: Category[];
+  rules: (FilterRule | FilterRuleGroup)[];
+  notifications: {
+    immediate: boolean;
+    dailyDigest: boolean;
+    weeklyDigest: boolean;
+    monthlyDigest: boolean;
+  };
+}
 
-          // Validate regular rules
-          if (!rule.field || rule.field.trim() === '') {
-            return false;
-          }
-          if (!rule.operator || rule.operator.trim() === '') {
-            return false;
-          }
-          if (rule.value === undefined || rule.value === null) {
-            return false;
-          }
-          // Check for empty string values
-          if (typeof rule.value === 'string' && rule.value.trim() === '') {
-            return false;
-          }
-        }
-        return true;
-      },
-      {
-        message:
-          'All rules must have valid field, operator, and non-empty value',
+const filterFormResolver: Resolver<CreateFilterFormData> = async (values) => {
+  const errors: Record<string, { type: string; message: string }> = {};
+
+  if (!values.name || values.name.trim().length === 0) {
+    errors.name = { type: 'required', message: 'Filter name is required' };
+  } else if (values.name.length > 100) {
+    errors.name = { type: 'maxLength', message: 'Filter name must be less than 100 characters' };
+  }
+
+  if (values.description && values.description.length > 500) {
+    errors.description = { type: 'maxLength', message: 'Description must be less than 500 characters' };
+  }
+
+  if (!values.enabledSites || values.enabledSites.length === 0) {
+    errors.enabledSites = { type: 'min', message: 'At least one site must be selected' };
+  }
+
+  if (!values.categories || values.categories.length === 0) {
+    errors.categories = { type: 'min', message: 'At least one category must be selected' };
+  }
+
+  if (!values.rules || values.rules.length === 0) {
+    errors.rules = { type: 'min', message: 'At least one rule must be configured' };
+  } else {
+    for (const rule of values.rules) {
+      if ('logic' in rule) continue;
+      const r = rule as FilterRule;
+      if (
+        !r.field || r.field.trim() === '' ||
+        !r.operator || r.operator.trim() === '' ||
+        r.value === undefined || r.value === null ||
+        (typeof r.value === 'string' && r.value.trim() === '')
+      ) {
+        errors.rules = { type: 'validate', message: 'All rules must have valid field, operator, and non-empty value' };
+        break;
       }
-    ),
-  notifications: z.object({
-    immediate: z.boolean(),
-    dailyDigest: z.boolean(),
-    weeklyDigest: z.boolean(),
-    monthlyDigest: z.boolean(),
-  }),
-});
+    }
+  }
 
-export type CreateFilterFormData = z.infer<typeof createFilterSchema>;
+  return {
+    values: Object.keys(errors).length === 0 ? values : {},
+    errors,
+  };
+};
 
 export interface UseFilterFormParams {
   /** Callback when form is submitted (create mode) */
@@ -188,7 +131,7 @@ export function useFilterForm(
 
   // Initialize form with react-hook-form
   const form = useForm<CreateFilterFormData>({
-    resolver: zodResolver(createFilterSchema),
+    resolver: filterFormResolver,
     defaultValues: {
       name: '',
       description: '',
