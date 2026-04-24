@@ -1100,17 +1100,36 @@ describe('Filter Management - Comprehensive E2E', () => {
   });
 
   describe('Data Reliability and Consistency', () => {
+    // Shared helper: load all dealabs LLM fixture expected outputs as FixtureArticle[]
+    // Prices in .expected.json are stored in cents — this helper converts to euros.
+    const loadDealabsFixtures = (): Cypress.Chainable<FixtureArticle[]> =>
+      cy
+        .fixture('../../apps/scraper/src/llm-extraction/sites/dealabs/fixtures/dealabs-001.expected.json')
+        .then((d1) =>
+          cy
+            .fixture('../../apps/scraper/src/llm-extraction/sites/dealabs/fixtures/dealabs-002.expected.json')
+            .then((d2) =>
+              cy
+                .fixture('../../apps/scraper/src/llm-extraction/sites/dealabs/fixtures/dealabs-003.expected.json')
+                .then((d3) =>
+                  [d1, d2, d3].map((d) => ({
+                    ...(d as FixtureArticle),
+                    currentPrice: (d as { currentPrice: number }).currentPrice / 100,
+                  }))
+                )
+            )
+        );
+
     it('should validate fixture data integrity', function () {
       cy.task(
         'log',
         '🧪 Validating fixture data integrity with filter matching...'
       );
 
-      // Step 1: Load fixture data to understand what we're testing against
-      cy.fixture('../../apps/scraper/test/fixtures/correct-deals.json').then(
-        (fixtureDeals: FixtureArticle[]) => {
+      // Step 1: Load fixture data from LLM extraction expected outputs
+      loadDealabsFixtures().then((fixtureDeals: FixtureArticle[]) => {
           cy.log(
-            `📊 Loaded ${fixtureDeals.length} deals from fixture for validation`
+            `📊 Loaded ${fixtureDeals.length} deals from LLM fixtures for validation`
           );
 
           // Step 2: Analyze fixture data to determine price and heat ranges
@@ -1140,7 +1159,7 @@ describe('Filter Management - Comprehensive E2E', () => {
               {
                 field: 'currentPrice',
                 operator: '<=',
-                value: '100', // Should match 6 out of 8 deals
+                value: '100', // Should match 1 out of 3 deals (the free €0 deal)
                 weight: 1.0,
               },
               {
@@ -1288,14 +1307,14 @@ describe('Filter Management - Comprehensive E2E', () => {
         '🧪 Testing match deletion when filter criteria is changed...'
       );
 
-      // Step 1: Load fixture data
-      cy.fixture('../../apps/scraper/test/fixtures/correct-deals.json').then(
-        (fixtureDeals: FixtureArticle[]) => {
+      // Step 1: Load fixture data from LLM extraction expected outputs
+      loadDealabsFixtures().then((fixtureDeals: FixtureArticle[]) => {
           cy.log(
-            `📊 Loaded ${fixtureDeals.length} deals from fixture for match deletion test`
+            `📊 Loaded ${fixtureDeals.length} deals from LLM fixtures for match deletion test`
           );
 
           // Step 2: Create filter that will match fixture data
+          // temperature >= 200 matches 2 of 3 fixture deals (Samsung S26 temp=221, Philips TV temp=297)
           const testFilter = {
             name: 'Match Deletion Test Filter',
             description:
@@ -1303,9 +1322,9 @@ describe('Filter Management - Comprehensive E2E', () => {
             categories: ['accessoires-gaming'],
             rules: [
               {
-                field: 'currentPrice',
-                operator: '<=',
-                value: '100',
+                field: 'temperature',
+                operator: '>=',
+                value: '200',
                 weight: 1.0,
               },
             ],
@@ -1371,11 +1390,11 @@ describe('Filter Management - Comprehensive E2E', () => {
                   );
 
                   // Step 11: Change filter criteria to no longer match existing deals
-                  // Clear existing rules and add a very restrictive rule
-                  cy.get('[data-cy=rule-value-input-currentPrice-lte-0]')
+                  // Raise threshold from 200 to 10000 — no deal has temperature >= 10000
+                  cy.get('[data-cy=rule-value-input-temperature-gte-0]')
                     .should('be.visible')
                     .clear()
-                    .type('1'); // Change from <=100 to <=1 (will match nothing)
+                    .type('10000');
 
                   // Step 12: Submit filter update
                   cy.get('[data-cy=update-filter-submit]')

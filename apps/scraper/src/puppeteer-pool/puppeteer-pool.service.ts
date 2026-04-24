@@ -271,37 +271,39 @@ export class PuppeteerPoolService implements OnModuleDestroy {
   }
 
   /**
-   * Get HTML content from local fixture file for test mode
-   * Supports multiple sites: dealabs, vinted, leboncoin
-   * @param url - URL to map to fixture file
-   * @returns HTML content from fixture file
+   * Build a synthetic full-page HTML from the LLM extraction card-snippet fixtures for a site.
+   * Reads all .html files from src/llm-extraction/sites/{siteId}/fixtures/ and concatenates them.
+   * @param url - URL used only to resolve the target site
+   * @returns Synthetic page HTML containing all fixture cards
    */
   private async getFixtureContent(url: string): Promise<string> {
-    this.logger.debug(`🧪 TEST MODE: Loading fixture for URL: ${url}`);
+    this.logger.debug(`🧪 TEST MODE: Building fixture page for URL: ${url}`);
 
-    // Determine site and category from URL
-    const { siteId, categorySlug } = this.parseUrlForFixture(url);
-    const fixtureName = `${siteId}-${categorySlug}.html`;
+    const { siteId } = this.parseUrlForFixture(url);
 
-    // Check multiple possible fixture locations
-    const possiblePaths = [
-      path.join(process.cwd(), 'apps', 'scraper', 'test', 'fixtures', fixtureName),
-      path.join(process.cwd(), 'test', 'fixtures', fixtureName),
-    ];
+    const fixtureDir = path.join(
+      process.cwd(),
+      'apps', 'scraper', 'src', 'llm-extraction', 'sites', siteId, 'fixtures',
+    );
 
-    for (const fixturePath of possiblePaths) {
-      try {
-        const html = await fs.readFile(fixturePath, 'utf-8');
-        this.logger.debug(`✅ Loaded test fixture: ${fixtureName} from ${fixturePath}`);
-        return html;
-      } catch {
-        // Try next path
-      }
+    let cardFiles: string[];
+    try {
+      const entries = await fs.readdir(fixtureDir);
+      cardFiles = entries.filter((f) => f.endsWith('.html')).sort();
+    } catch {
+      throw new Error(`Test fixture directory not found for site "${siteId}" at ${fixtureDir}`);
     }
 
-    const errorMsg = `Test fixture not found: ${fixtureName}. Searched in: ${possiblePaths.join(', ')}`;
-    this.logger.error(`❌ ${errorMsg}`);
-    throw new Error(errorMsg);
+    if (cardFiles.length === 0) {
+      throw new Error(`No HTML fixture cards found for site "${siteId}" in ${fixtureDir}`);
+    }
+
+    const cards = await Promise.all(
+      cardFiles.map((f) => fs.readFile(path.join(fixtureDir, f), 'utf-8'))
+    );
+
+    this.logger.debug(`✅ Built synthetic page for ${siteId} from ${cardFiles.length} fixture cards`);
+    return `<html><body>\n${cards.join('\n')}\n</body></html>`;
   }
 
   /**
