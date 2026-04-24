@@ -45,10 +45,11 @@ function assertNullableBool(val: unknown, field: string): boolean | null {
   return val;
 }
 
-function parseNullableDate(val: string | null): Date | null {
+function parseValidatedDate(val: string | null, field: string): Date | null {
   if (val === null) return null;
   const parsed = new Date(val);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  if (Number.isNaN(parsed.getTime())) throw new LlmValidationError(`${field} is not a valid date string`);
+  return parsed;
 }
 
 export function validateLeBonCoinListing(raw: unknown): UniversalListing {
@@ -65,7 +66,7 @@ export function validateLeBonCoinListing(raw: unknown): UniversalListing {
   const currentPrice = assertNullableInt(r['currentPrice'], 'currentPrice');
   const description = assertNullableString(r['description'], 'description');
   const imageUrl = assertNullableString(r['imageUrl'], 'imageUrl');
-  const publishedAtRaw = typeof r['publishedAt'] === 'string' ? r['publishedAt'] : null;
+  const publishedAtRaw = assertNullableString(r['publishedAt'], 'publishedAt');
   const location = assertNullableString(r['location'], 'location');
   const city = assertNullableString(r['city'], 'city');
   const postcode = assertNullableString(r['postcode'], 'postcode');
@@ -73,7 +74,7 @@ export function validateLeBonCoinListing(raw: unknown): UniversalListing {
   const proSeller = assertNullableBool(r['proSeller'], 'proSeller');
   const urgentFlag = assertNullableBool(r['urgentFlag'], 'urgentFlag');
 
-  const publishedAt = parseNullableDate(publishedAtRaw);
+  const publishedAt = parseValidatedDate(publishedAtRaw, 'publishedAt');
 
   const siteSpecificData: LeBonCoinData = {
     type: SiteSource.LEBONCOIN,

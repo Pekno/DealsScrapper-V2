@@ -35,10 +35,11 @@ function assertNullableInt(val: unknown, field: string): number | null {
   return val;
 }
 
-function parseNullableDate(val: string | null): Date | null {
+function parseValidatedDate(val: string | null, field: string): Date | null {
   if (val === null) return null;
   const parsed = new Date(val);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  if (Number.isNaN(parsed.getTime())) throw new LlmValidationError(`${field} is not a valid date string`);
+  return parsed;
 }
 
 export function validateDealabsListing(raw: unknown): UniversalListing {
@@ -59,9 +60,9 @@ export function validateDealabsListing(raw: unknown): UniversalListing {
   const description = assertNullableString(r['description'], 'description');
   const imageUrl = assertNullableString(r['imageUrl'], 'imageUrl');
   const merchant = assertNullableString(r['merchant'], 'merchant');
-  const publishedAtRaw = typeof r['publishedAt'] === 'string' ? r['publishedAt'] : null;
+  const publishedAtRaw = assertNullableString(r['publishedAt'], 'publishedAt');
 
-  const publishedAt = parseNullableDate(publishedAtRaw);
+  const publishedAt = parseValidatedDate(publishedAtRaw, 'publishedAt');
 
   const siteSpecificData: DealabsData = {
     type: SiteSource.DEALABS,

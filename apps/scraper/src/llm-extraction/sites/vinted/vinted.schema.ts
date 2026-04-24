@@ -37,10 +37,16 @@ function assertNullableInt(val: unknown, field: string): number | null {
   return val;
 }
 
-function parseNullableDate(val: string | null): Date | null {
+function assertRequiredString(val: unknown, field: string): string {
+  if (typeof val !== 'string') throw new LlmValidationError(`${field} is required and must be a string`);
+  return val;
+}
+
+function parseValidatedDate(val: string | null, field: string): Date | null {
   if (val === null) return null;
   const parsed = new Date(val);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  if (Number.isNaN(parsed.getTime())) throw new LlmValidationError(`${field} is not a valid date string`);
+  return parsed;
 }
 
 export function validateVintedListing(raw: unknown): UniversalListing {
@@ -61,8 +67,8 @@ export function validateVintedListing(raw: unknown): UniversalListing {
   const publishedAtRaw = assertNullableString(r['publishedAt'], 'publishedAt');
   const brand = assertNullableString(r['brand'], 'brand');
   const size = assertNullableString(r['size'], 'size');
-  const condition = assertNullableString(r['condition'], 'condition');
-  const publishedAt = parseNullableDate(publishedAtRaw);
+  const condition = assertRequiredString(r['condition'], 'condition');
+  const publishedAt = parseValidatedDate(publishedAtRaw, 'publishedAt');
 
   const siteSpecificData: VintedData = {
     type: SiteSource.VINTED,
