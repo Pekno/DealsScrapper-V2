@@ -71,3 +71,41 @@ describe('DealProcessingUtils.crossedBelowThreshold', () => {
     expect(DealProcessingUtils.crossedBelowThreshold(100, 70, undefined)).toBe(false);
   });
 });
+
+describe('DealProcessingUtils.cooldownElapsed', () => {
+  const now = new Date('2026-06-27T12:00:00Z');
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+
+  it('allows the first alert when there is no last-notified timestamp (null)', () => {
+    expect(DealProcessingUtils.cooldownElapsed(null, now, ONE_HOUR_MS)).toBe(true);
+  });
+
+  it('allows the first alert when there is no last-notified timestamp (undefined)', () => {
+    expect(DealProcessingUtils.cooldownElapsed(undefined, now, ONE_HOUR_MS)).toBe(true);
+  });
+
+  it('allows an alert exactly on the cooldown boundary (elapsed === cooldownMs)', () => {
+    const lastNotifiedAt = new Date('2026-06-27T11:00:00Z'); // exactly one hour earlier
+
+    expect(DealProcessingUtils.cooldownElapsed(lastNotifiedAt, now, ONE_HOUR_MS)).toBe(true);
+  });
+
+  it('blocks an alert while still inside the cooldown window (elapsed < cooldownMs)', () => {
+    const lastNotifiedAt = new Date('2026-06-27T11:30:00Z'); // only 30 minutes earlier
+
+    expect(DealProcessingUtils.cooldownElapsed(lastNotifiedAt, now, ONE_HOUR_MS)).toBe(false);
+  });
+
+  it('allows an alert once the window has fully passed (elapsed > cooldownMs)', () => {
+    const lastNotifiedAt = new Date('2026-06-27T10:00:00Z'); // two hours earlier
+
+    expect(DealProcessingUtils.cooldownElapsed(lastNotifiedAt, now, ONE_HOUR_MS)).toBe(true);
+  });
+
+  it('disables throttling when cooldownMs is non-positive (always-elapsed escape hatch)', () => {
+    const lastNotifiedAt = new Date('2026-06-27T11:59:59Z'); // one second earlier
+
+    expect(DealProcessingUtils.cooldownElapsed(lastNotifiedAt, now, 0)).toBe(true);
+    expect(DealProcessingUtils.cooldownElapsed(lastNotifiedAt, now, -1)).toBe(true);
+  });
+});

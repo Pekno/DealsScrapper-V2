@@ -74,6 +74,28 @@ export class DealProcessingUtils {
   }
 
   /**
+   * Time-based anti-spam gate for price-drop alerts — the cooldown complement to
+   * the value-based `crossedBelowThreshold` edge. Returns true when a fresh alert
+   * MAY fire: either it has never alerted (no `lastNotifiedAt`) or the cooldown
+   * window has fully elapsed. A non-positive `cooldownMs` disables throttling
+   * (always-elapsed escape hatch). `now` is injected, not read from Date.now(),
+   * so the gate stays pure and deterministic for testing.
+   * @param lastNotifiedAt - When the last alert fired (null/undefined if never)
+   * @param now - Current instant (injected for determinism)
+   * @param cooldownMs - Minimum gap between alerts; <= 0 means no throttling
+   * @returns true if a new alert may fire now, false while inside the window
+   */
+  static cooldownElapsed(
+    lastNotifiedAt: Date | null | undefined,
+    now: Date,
+    cooldownMs: number,
+  ): boolean {
+    if (cooldownMs <= 0) return true; // throttling disabled
+    if (lastNotifiedAt == null) return true; // never alerted before
+    return now.getTime() - lastNotifiedAt.getTime() >= cooldownMs;
+  }
+
+  /**
    * Validates if a raw deal has all required fields
    * @param deal - Raw deal to validate
    * @returns True if deal is valid, false otherwise
