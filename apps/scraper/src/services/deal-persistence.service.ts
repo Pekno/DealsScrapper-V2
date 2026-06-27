@@ -242,12 +242,13 @@ export class DealPersistenceService {
    * Check if a deal already exists in the database or ElasticSearch
    *
    * @param externalId - External ID to check
+   * @param siteId - Site the externalId belongs to (externalId is only unique per site)
    * @returns True if deal exists, false otherwise
    */
-  async dealExists(externalId: string): Promise<boolean> {
+  async dealExists(externalId: string, siteId: string): Promise<boolean> {
     // Check PostgreSQL first (faster for recent deals)
     const existsInPostgres =
-      await this.articleRepository.existsByExternalId(externalId);
+      await this.articleRepository.existsByExternalId(externalId, siteId);
     if (existsInPostgres) {
       this.logger.debug(`💾 Deal ${externalId} found in PostgreSQL`);
       return true;
@@ -282,12 +283,17 @@ export class DealPersistenceService {
    * Check existence for multiple deals efficiently
    *
    * @param externalIds - Array of external IDs to check
+   * @param siteId - Site the externalIds belong to (externalId is only unique per site)
    * @returns Map of external ID to existence status
    */
   async checkMultipleDealExistence(
-    externalIds: string[]
+    externalIds: string[],
+    siteId: string
   ): Promise<Map<string, boolean>> {
-    return this.articleRepository.checkExistenceByExternalIds(externalIds);
+    return this.articleRepository.checkExistenceByExternalIds(
+      externalIds,
+      siteId
+    );
   }
 
   /**
@@ -567,9 +573,18 @@ export class DealPersistenceService {
     uniqueDeals: RawDeal[];
     duplicateCount: number;
   }> {
+    // Deals in a single scrape batch share the same source site.
+    const siteId = deals[0]?.source;
+    if (!siteId) {
+      return { uniqueDeals: [], duplicateCount: 0 };
+    }
+
     const externalIds = deals.map((deal) => deal.externalId);
     const existenceMap =
-      await this.articleRepository.checkExistenceByExternalIds(externalIds);
+      await this.articleRepository.checkExistenceByExternalIds(
+        externalIds,
+        siteId
+      );
 
     const uniqueDeals = deals.filter(
       (deal) => !existenceMap.get(deal.externalId)

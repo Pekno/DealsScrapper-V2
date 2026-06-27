@@ -15,18 +15,20 @@ import type { RawDeal } from '@dealscrapper/shared-types';
  */
 export interface IArticleRepository {
   /**
-   * Find article by external ID
+   * Find article by external ID within a specific site
    * @param externalId - External deal identifier
+   * @param siteId - Site the externalId belongs to (externalId is only unique per site)
    * @returns Article or null if not found
    */
-  findByExternalId(externalId: string): Promise<Article | null>;
+  findByExternalId(externalId: string, siteId: string): Promise<Article | null>;
 
   /**
-   * Check if an article exists by external ID
+   * Check if an article exists by external ID within a specific site
    * @param externalId - External deal identifier to check
+   * @param siteId - Site the externalId belongs to (externalId is only unique per site)
    * @returns True if article exists, false otherwise
    */
-  existsByExternalId(externalId: string): Promise<boolean>;
+  existsByExternalId(externalId: string, siteId: string): Promise<boolean>;
 
   /**
    * Create a single article from RawDeal
@@ -71,12 +73,14 @@ export interface IArticleRepository {
   findRecent(hours: number): Promise<Article[]>;
 
   /**
-   * Count articles by external IDs (for duplicate checking)
+   * Count articles by external IDs within a specific site (for duplicate checking)
    * @param externalIds - Array of external IDs to check
+   * @param siteId - Site the externalIds belong to (externalId is only unique per site)
    * @returns Map of external ID to boolean (true if exists)
    */
   checkExistenceByExternalIds(
-    externalIds: string[]
+    externalIds: string[],
+    siteId: string
   ): Promise<Map<string, boolean>>;
 
   /**
@@ -129,38 +133,44 @@ export class ArticleRepository
   }
 
   /**
-   * Find article by external ID
-   * Used by: MilestoneScrapingService, DealExtractionService
-   * Note: Since Article has compound unique on [source, externalId],
-   * we use findFirst when source is unknown
+   * Find article by external ID within a specific site
+   * Uses compound unique key [siteId, externalId] since externalId is only
+   * unique per site.
    */
-  async findByExternalId(externalId: string): Promise<Article | null> {
+  async findByExternalId(
+    externalId: string,
+    siteId: string
+  ): Promise<Article | null> {
     try {
-      return await this.prisma.article.findFirst({
-        where: { externalId },
+      return await this.prisma.article.findUnique({
+        where: { siteId_externalId: { siteId, externalId } },
       });
     } catch (error) {
       this.handleDatabaseError(
         error,
-        `Find article by external ID ${externalId}`
+        `Find article by external ID ${externalId} for site ${siteId}`
       );
     }
   }
 
   /**
-   * Check if an article exists by external ID (optimized for existence checks)
-   * Used by: MilestoneScrapingService for duplicate detection
+   * Check if an article exists by external ID within a specific site
+   * (optimized for existence checks). Scoped by siteId since externalId is
+   * only unique per site.
    */
-  async existsByExternalId(externalId: string): Promise<boolean> {
+  async existsByExternalId(
+    externalId: string,
+    siteId: string
+  ): Promise<boolean> {
     try {
       const count = await this.prisma.article.count({
-        where: { externalId },
+        where: { siteId, externalId },
       });
       return count > 0;
     } catch (error) {
       this.handleDatabaseError(
         error,
-        `Check article existence for external ID ${externalId}`
+        `Check article existence for external ID ${externalId} for site ${siteId}`
       );
     }
   }
@@ -303,14 +313,18 @@ export class ArticleRepository
   }
 
   /**
-   * Check existence by external IDs for efficient duplicate detection
+   * Check existence by external IDs within a specific site for efficient
+   * duplicate detection. Scoped by siteId since externalId is only unique per
+   * site, so the returned map keyed by externalId is unambiguous.
    */
   async checkExistenceByExternalIds(
-    externalIds: string[]
+    externalIds: string[],
+    siteId: string
   ): Promise<Map<string, boolean>> {
     try {
       const existingArticles = await this.prisma.article.findMany({
         where: {
+          siteId,
           externalId: {
             in: externalIds,
           },
