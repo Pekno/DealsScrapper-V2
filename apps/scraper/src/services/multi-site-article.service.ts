@@ -12,10 +12,12 @@
  * 4. Indexes to Elasticsearch
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@dealscrapper/database';
+import { createServiceLogger } from '@dealscrapper/shared-logging';
 import { ArticleWrapper, SiteSource } from '@dealscrapper/shared-types/article';
 import type { Article, Prisma } from '@dealscrapper/database';
+import { scraperLogConfig } from '../config/logging.config.js';
 import { ElasticsearchIndexerService } from '../elasticsearch/services/elasticsearch-indexer.service.js';
 import type {
   UniversalListing,
@@ -40,7 +42,7 @@ export interface BulkCreationResult {
 
 @Injectable()
 export class MultiSiteArticleService {
-  private readonly logger = new Logger(MultiSiteArticleService.name);
+  private readonly logger = createServiceLogger(scraperLogConfig);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -65,6 +67,14 @@ export class MultiSiteArticleService {
 
         // Create site-specific extension
         await this.createExtension(tx, baseArticle.id, listing);
+
+        // First price observation: no previous price on create
+        await this.recordPriceObservation(
+          tx,
+          baseArticle.id,
+          listing.currentPrice,
+          null,
+        );
 
         return baseArticle;
       });
@@ -216,7 +226,12 @@ export class MultiSiteArticleService {
 
       if (existing) {
         // Update existing article
-        return await this.updateFromListing(existing.id, listing, categoryId);
+        return await this.updateFromListing(
+          existing.id,
+          listing,
+          categoryId,
+          existing.currentPrice,
+        );
       }
 
       // Create new article
@@ -236,7 +251,12 @@ export class MultiSiteArticleService {
           },
         });
         if (raceExisting) {
-          return await this.updateFromListing(raceExisting.id, listing, categoryId);
+          return await this.updateFromListing(
+            raceExisting.id,
+            listing,
+            categoryId,
+            raceExisting.currentPrice,
+          );
         }
       }
       const errorMessage =
@@ -255,6 +275,7 @@ export class MultiSiteArticleService {
     articleId: string,
     listing: UniversalListing,
     categoryId: string,
+    previousPrice: number | null,
   ): Promise<ArticleCreationResult> {
     const article = await this.prisma.$transaction(async (tx) => {
       // Update base article
@@ -275,6 +296,14 @@ export class MultiSiteArticleService {
       // Update extension
       await this.updateExtension(tx, articleId, listing);
 
+      // Append a price observation only when the price actually changed
+      await this.recordPriceObservation(
+        tx,
+        articleId,
+        listing.currentPrice,
+        previousPrice,
+      );
+
       return updatedArticle;
     });
 
@@ -291,6 +320,22 @@ export class MultiSiteArticleService {
     }
 
     return { article, indexed };
+  }
+
+  /**
+   * Append-only, change-gated price history (PriceGhost style): insert a
+   * PriceObservation only when the price is known and differs from the last
+   * recorded price. Article.currentPrice remains the fast-read "latest".
+   */
+  private async recordPriceObservation(
+    tx: Prisma.TransactionClient,
+    articleId: string,
+    newPrice: number | null,
+    previousPrice: number | null,
+  ): Promise<void> {
+    if (newPrice == null) return; // no price, nothing to record
+    if (newPrice === previousPrice) return; // change-gated: skip unchanged
+    await tx.priceObservation.create({ data: { articleId, price: newPrice } });
   }
 
   /**

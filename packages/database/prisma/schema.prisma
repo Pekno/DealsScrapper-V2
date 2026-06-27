@@ -263,6 +263,19 @@ model ArticleLeBonCoin {
   @@map("article_leboncoin")
 }
 
+// Append-only price history. NO @relation to Article (Wrapper pattern, consistent
+// with extension tables). Stores each observed price so we stop losing data when
+// Article.currentPrice is overwritten in place on each scrape.
+model PriceObservation {
+  id         String   @id @default(cuid())
+  articleId  String
+  price      Float
+  observedAt DateTime @default(now())
+
+  @@index([articleId, observedAt])
+  @@map("price_observations")
+}
+
 model Match {
   id         String    @id @default(cuid())
   filterId   String

@@ -33,6 +33,9 @@ describe('MultiSiteArticleService', () => {
       create: jest.fn(),
       update: jest.fn(),
     },
+    priceObservation: {
+      create: jest.fn(),
+    },
     $transaction: jest.fn(),
   };
 
@@ -351,6 +354,98 @@ describe('MultiSiteArticleService', () => {
 
       expect(result.article).toBeDefined();
       expect(mockPrismaService.article.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('price observation (append-only, change-gated)', () => {
+    const buildDealabsListing = (currentPrice: number): UniversalListing => ({
+      externalId: 'price-deal',
+      title: 'Price Tracked Deal',
+      description: null,
+      url: 'https://dealabs.com/deal/price',
+      imageUrl: null,
+      siteId: SiteSource.DEALABS,
+      currentPrice,
+      originalPrice: null,
+      merchant: null,
+      location: null,
+      publishedAt: new Date('2025-01-15'),
+      isActive: true,
+      categorySlug: 'test',
+      siteSpecificData: {
+        type: 'dealabs',
+        temperature: 100,
+        commentCount: 5,
+        communityVerified: false,
+        freeShipping: false,
+        isCoupon: false,
+        discountPercentage: null,
+        expiresAt: null,
+      } as DealabsData,
+    });
+
+    beforeEach(() => {
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(mockPrismaService),
+      );
+      mockPrismaService.priceObservation.create.mockResolvedValue({});
+      mockPrismaService.articleDealabs.create.mockResolvedValue({});
+      mockPrismaService.articleDealabs.update.mockResolvedValue({});
+      jest
+        .spyOn(
+          require('@dealscrapper/shared-types/article').ArticleWrapper,
+          'load',
+        )
+        .mockResolvedValue({ base: { id: 'price-article' }, source: SiteSource.DEALABS });
+    });
+
+    it('writes exactly ONE observation across two scrapes at the SAME price', async () => {
+      // Arrange
+      const listing = buildDealabsListing(100);
+      const createdArticle = { id: 'price-article', currentPrice: 100 };
+
+      // Act — first scrape: create (price unknown before -> one observation)
+      mockPrismaService.article.findFirst.mockResolvedValueOnce(null);
+      mockPrismaService.article.create.mockResolvedValueOnce(createdArticle);
+      await service.upsertFromListing(listing, 'cat-1');
+
+      // Act — second scrape: update at the same price (change-gated -> no observation)
+      mockPrismaService.article.findFirst.mockResolvedValueOnce(createdArticle);
+      mockPrismaService.article.update.mockResolvedValueOnce(createdArticle);
+      await service.upsertFromListing(listing, 'cat-1');
+
+      // Assert
+      expect(mockPrismaService.priceObservation.create).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.priceObservation.create).toHaveBeenCalledWith({
+        data: { articleId: 'price-article', price: 100 },
+      });
+    });
+
+    it('writes a SECOND observation when the price changes on update', async () => {
+      // Arrange
+      const createListing = buildDealabsListing(100);
+      const updateListing = buildDealabsListing(80);
+      const createdArticle = { id: 'price-article', currentPrice: 100 };
+      const updatedArticle = { id: 'price-article', currentPrice: 80 };
+
+      // Act — first scrape: create at 100
+      mockPrismaService.article.findFirst.mockResolvedValueOnce(null);
+      mockPrismaService.article.create.mockResolvedValueOnce(createdArticle);
+      await service.upsertFromListing(createListing, 'cat-1');
+
+      // Act — second scrape: update to 80 (price changed -> new observation)
+      mockPrismaService.article.findFirst.mockResolvedValueOnce(createdArticle);
+      mockPrismaService.article.update.mockResolvedValueOnce(updatedArticle);
+      await service.upsertFromListing(updateListing, 'cat-1');
+
+      // Assert
+      expect(mockPrismaService.priceObservation.create).toHaveBeenCalledTimes(2);
+      expect(mockPrismaService.priceObservation.create).toHaveBeenNthCalledWith(1, {
+        data: { articleId: 'price-article', price: 100 },
+      });
+      expect(mockPrismaService.priceObservation.create).toHaveBeenNthCalledWith(2, {
+        data: { articleId: 'price-article', price: 80 },
+      });
     });
   });
 });
