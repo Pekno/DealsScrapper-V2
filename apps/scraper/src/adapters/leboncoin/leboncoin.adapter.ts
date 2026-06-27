@@ -1,86 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import * as cheerio from 'cheerio';
-import type { CheerioAPI, Cheerio } from 'cheerio';
+import type { Cheerio } from 'cheerio';
 import type { Element } from 'domhandler';
 import { SiteSource } from '@dealscrapper/shared-types';
-import type {
-  ISiteAdapter,
-  UniversalListing,
-} from '../base/site-adapter.interface.js';
-import { createServiceLogger } from '@dealscrapper/shared-logging';
-import { scraperLogConfig } from '../../config/logging.config.js';
+import { BaseSiteAdapter, type ListingElementId } from '../base/base-site-adapter.js';
 import { LlmExtractionService } from '../../llm-extraction/llm-extraction.service.js';
 
 @Injectable()
-export class LeBonCoinAdapter implements ISiteAdapter {
+export class LeBonCoinAdapter extends BaseSiteAdapter {
   readonly siteId = SiteSource.LEBONCOIN;
   readonly baseUrl = 'https://www.leboncoin.fr';
   readonly displayName = 'LeBonCoin';
   readonly colorCode = '#FF6E14';
-  readonly urlOptimizer = undefined;
 
-  private readonly logger = createServiceLogger(scraperLogConfig);
-
-  constructor(private readonly llmExtraction: LlmExtractionService) {}
-
-  async extractListings(html: string, sourceUrl: string): Promise<{ listings: UniversalListing[]; llmTimeMs: number }> {
-    this.validateHtml(html);
-
-    const $ = cheerio.load(html);
-    const selector = this.getListingSelector();
-
-    const elements: Cheerio<Element>[] = [];
-    $(selector).each((_index, element) => {
-      elements.push($(element) as Cheerio<Element>);
-    });
-
-    const results = await Promise.allSettled(
-      elements.map(($element, index) =>
-        this.extractSingleListing($, $element, sourceUrl, index),
-      ),
-    );
-
-    const listings: UniversalListing[] = [];
-    let llmTimeMs = 0;
-    let failedCount = 0;
-
-    for (const result of results) {
-      if (result.status === 'fulfilled' && result.value !== null) {
-        listings.push(result.value.listing);
-        llmTimeMs += result.value.ollamaMs;
-      } else {
-        failedCount++;
-      }
-    }
-
-    if (failedCount > 0) {
-      this.logger.warn(`Failed to extract ${failedCount} of ${failedCount + listings.length} LeBonCoin listings`);
-    }
-    this.logger.log(`Extracted ${listings.length} LeBonCoin listings from ${sourceUrl}`);
-    return { listings, llmTimeMs };
+  constructor(llmExtraction: LlmExtractionService) {
+    super(llmExtraction);
   }
 
-  private async extractSingleListing(
-    $: CheerioAPI,
-    $element: Cheerio<Element>,
-    sourceUrl: string,
-    index: number,
-  ): Promise<{ listing: UniversalListing; ollamaMs: number } | null> {
-    const adId = $element.attr('data-qa-id') ?? $element.attr('id') ?? 'unknown';
-    try {
-      const result = await this.llmExtraction.extract({
-        siteId: SiteSource.LEBONCOIN,
-        listingHtml: $.html($element),
-        sourceUrl,
-      });
-      return result;
-    } catch (error) {
-      const errorMsg = (error as Error).message || 'Unknown error';
-      this.logger.warn(
-        `Failed to extract LeBonCoin listing [${index}] (ad-id: ${adId}): ${errorMsg}`,
-      );
-      return null;
-    }
+  protected getElementId($element: Cheerio<Element>): ListingElementId {
+    return {
+      value: $element.attr('data-qa-id') ?? $element.attr('id') ?? 'unknown',
+      label: 'ad-id',
+    };
   }
 
   buildCategoryUrl(categorySlug: string, page: number = 1): string {
