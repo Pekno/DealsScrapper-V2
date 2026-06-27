@@ -38,17 +38,6 @@ export class HtmlToMarkdownService {
         return `![${alt}](${src}${titlePart})`;
       },
     });
-
-    // Drop class and id attributes from all elements
-    this.turndown.addRule('strip-classes-ids', {
-      filter: (node) => {
-        return (
-          node.nodeType === 1 &&
-          (node.hasAttribute('class') || node.hasAttribute('id'))
-        );
-      },
-      replacement: (content) => content,
-    });
   }
 
   prepare(html: string, sourceUrl: string): string {
@@ -56,6 +45,11 @@ export class HtmlToMarkdownService {
 
     // Strip noise elements
     $('script, style, svg, noscript, iframe, canvas').remove();
+
+    // Strip aria-hidden elements and screen-reader-only elements — they duplicate
+    // visible content and confuse the LLM (e.g. "Prix: 195 €.. Baisse de prix")
+    $('[aria-hidden="true"]').remove();
+    $('[class*="sr-only"], .sr-only').remove();
 
     // Strip on* event attributes
     $('*').each((_i, el) => {
@@ -77,11 +71,18 @@ export class HtmlToMarkdownService {
       }
     });
 
-    // Strip tracking attributes
+    // Strip tracking attributes and presentational class/id attributes.
+    // Class/id are removed here (not in Turndown) so that Turndown's built-in
+    // link and image rules still run and preserve href/src.
     $('*').each((_i, el) => {
       if (el.type !== 'tag') return;
       for (const attr of TRACKING_ATTRS) {
         delete el.attribs[attr];
+      }
+      delete el.attribs['class'];
+      // Preserve id on article elements — sites encode the deal's external ID there (e.g. thread_3317035)
+      if (el.tagName !== 'article') {
+        delete el.attribs['id'];
       }
     });
 

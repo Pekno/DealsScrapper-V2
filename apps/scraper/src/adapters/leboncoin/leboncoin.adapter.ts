@@ -23,7 +23,7 @@ export class LeBonCoinAdapter implements ISiteAdapter {
 
   constructor(private readonly llmExtraction: LlmExtractionService) {}
 
-  async extractListings(html: string, sourceUrl: string): Promise<UniversalListing[]> {
+  async extractListings(html: string, sourceUrl: string): Promise<{ listings: UniversalListing[]; llmTimeMs: number }> {
     this.validateHtml(html);
 
     const $ = cheerio.load(html);
@@ -41,11 +41,13 @@ export class LeBonCoinAdapter implements ISiteAdapter {
     );
 
     const listings: UniversalListing[] = [];
+    let llmTimeMs = 0;
     let failedCount = 0;
 
     for (const result of results) {
       if (result.status === 'fulfilled' && result.value !== null) {
-        listings.push(result.value);
+        listings.push(result.value.listing);
+        llmTimeMs += result.value.ollamaMs;
       } else {
         failedCount++;
       }
@@ -55,7 +57,7 @@ export class LeBonCoinAdapter implements ISiteAdapter {
       this.logger.warn(`Failed to extract ${failedCount} of ${failedCount + listings.length} LeBonCoin listings`);
     }
     this.logger.log(`Extracted ${listings.length} LeBonCoin listings from ${sourceUrl}`);
-    return listings;
+    return { listings, llmTimeMs };
   }
 
   private async extractSingleListing(
@@ -63,15 +65,15 @@ export class LeBonCoinAdapter implements ISiteAdapter {
     $element: Cheerio<Element>,
     sourceUrl: string,
     index: number,
-  ): Promise<UniversalListing | null> {
+  ): Promise<{ listing: UniversalListing; ollamaMs: number } | null> {
     const adId = $element.attr('data-qa-id') ?? $element.attr('id') ?? 'unknown';
     try {
-      const listing = await this.llmExtraction.extract({
+      const result = await this.llmExtraction.extract({
         siteId: SiteSource.LEBONCOIN,
         listingHtml: $.html($element),
         sourceUrl,
       });
-      return listing;
+      return result;
     } catch (error) {
       const errorMsg = (error as Error).message || 'Unknown error';
       this.logger.warn(

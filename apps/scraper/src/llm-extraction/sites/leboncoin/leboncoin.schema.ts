@@ -11,8 +11,8 @@ export const LEBONCOIN_JSON_SCHEMA = {
     description: { type: ['string', 'null'] },
     url:         { type: 'string' },
     imageUrl:    { type: ['string', 'null'] },
-    currentPrice:{ type: ['integer', 'null'] },
-    originalPrice:{ type: ['integer', 'null'] },
+    currentPrice:{ type: ['number', 'null'] },
+    originalPrice:{ type: ['number', 'null'] },
     merchant:    { type: ['string', 'null'] },
     publishedAt: { type: ['string', 'null'] },
     location:    { type: ['string', 'null'] },
@@ -28,6 +28,14 @@ export const LEBONCOIN_JSON_SCHEMA = {
 function assertNullableString(val: unknown, field: string): string | null {
   if (val === null || val === undefined) return null;
   if (typeof val !== 'string') throw new LlmValidationError(`${field} must be a string or null`);
+  return val;
+}
+
+function assertNullableFloat(val: unknown, field: string): number | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val !== 'number') {
+    throw new LlmValidationError(`${field} must be a float or null`);
+  }
   return val;
 }
 
@@ -63,7 +71,7 @@ export function validateLeBonCoinListing(raw: unknown): UniversalListing {
   if (typeof r['title'] !== 'string') throw new LlmValidationError('missing or invalid title');
   if (typeof r['url'] !== 'string') throw new LlmValidationError('missing or invalid url');
 
-  const currentPrice = assertNullableInt(r['currentPrice'], 'currentPrice');
+  const currentPrice = assertNullableFloat(r['currentPrice'], 'currentPrice');
   const description = assertNullableString(r['description'], 'description');
   const imageUrl = assertNullableString(r['imageUrl'], 'imageUrl');
   const publishedAtRaw = assertNullableString(r['publishedAt'], 'publishedAt');

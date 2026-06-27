@@ -4,6 +4,7 @@ import { SharedConfigService } from '@dealscrapper/shared-config';
 import { PrismaService } from '@dealscrapper/database';
 import { PuppeteerPoolService } from '../../../src/puppeteer-pool/puppeteer-pool.service';
 import { OllamaService } from '../../../src/llm-extraction/ollama/ollama.service';
+import { LlmExtractionService } from '../../../src/llm-extraction/llm-extraction.service.js';
 
 // Minimal pool stats that satisfy PoolStats
 const basePoolStats = {
@@ -52,7 +53,17 @@ function makeService(overrides: {
     listModels: overrides.listModels ?? jest.fn().mockResolvedValue([]),
   } as unknown as OllamaService;
 
-  return new ScraperHealthService(puppeteerPool, prisma, sharedConfig, ollamaService);
+  const mockLlmExtraction = {
+    getStats: jest.fn().mockReturnValue({
+      totalExtractions: 0,
+      successfulExtractions: 0,
+      failedExtractions: 0,
+      avgExtractionTimeMs: 0,
+      lastExtractionTimeMs: 0,
+    }),
+  } as unknown as LlmExtractionService;
+
+  return new ScraperHealthService(puppeteerPool, prisma, sharedConfig, ollamaService, mockLlmExtraction);
 }
 
 describe('ScraperHealthService — Ollama health check', () => {

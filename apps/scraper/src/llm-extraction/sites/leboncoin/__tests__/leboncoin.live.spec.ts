@@ -6,7 +6,6 @@ import { SharedConfigModule } from '@dealscrapper/shared-config';
 import { loadLeBonCoinFixtures } from '../fixtures/index.js';
 import { validateLeBonCoinListing } from '../leboncoin.schema.js';
 import type { LlmExample } from '../../site.interface.js';
-import type { UniversalListing } from '@dealscrapper/shared-types';
 import { SiteSource } from '@dealscrapper/shared-types';
 
 const RUN_LIVE = process.env['LLM_TESTS'] === '1';
@@ -45,21 +44,27 @@ const RUN_LIVE = process.env['LLM_TESTS'] === '1';
       const example = examples[i];
       if (!example) throw new Error(`Fixture ${i} not loaded`);
 
-      const result: UniversalListing = await service.extract({
+      const { listing: result } = await service.extract({
         siteId: SiteSource.LEBONCOIN,
         listingHtml: `<html><body>${example.markdown}</body></html>`,
         sourceUrl: 'https://www.leboncoin.fr/recherche?category=15',
       });
 
       expect(() => validateLeBonCoinListing(result)).not.toThrow();
-      expect(result.externalId).toBeTruthy();
-      expect(result.title).toBeTruthy();
-      expect(result.url).toBeTruthy();
 
-      if (result.currentPrice !== null) {
-        expect(result.currentPrice).toBeGreaterThanOrEqual(0);
-        expect(result.currentPrice).toBeLessThan(100_000_000);
-      }
+      const expected = example.expectedOutput;
+      const expectedData = expected.siteSpecificData as { city: string | null; postcode: string | null; sellerName: string | null; proSeller: boolean | null; urgentFlag: boolean | null };
+      const resultData = result.siteSpecificData as { city: string | null; postcode: string | null; sellerName: string | null; proSeller: boolean | null; urgentFlag: boolean | null };
+
+      expect(result.externalId).toBe(expected.externalId);
+      expect(result.title).toBe(expected.title);
+      expect(result.url).toBe(expected.url);
+      expect(result.currentPrice).toBe(expected.currentPrice);
+      if (expected.location !== null) expect(result.location).toBe(expected.location);
+      if (expectedData.city !== null) expect(resultData.city).toBe(expectedData.city);
+      if (expectedData.postcode !== null) expect(resultData.postcode).toBe(expectedData.postcode);
+      if (expectedData.sellerName !== null) expect(resultData.sellerName).toBe(expectedData.sellerName);
+      if (expectedData.proSeller !== null) expect(resultData.proSeller).toBe(expectedData.proSeller);
     }, 60_000);
   }
 });

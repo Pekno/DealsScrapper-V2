@@ -39,7 +39,7 @@ export class DealabsAdapter implements ISiteAdapter {
    * Extracts listings from Dealabs HTML page by delegating per-element
    * extraction to the extractor microservice.
    */
-  async extractListings(html: string, sourceUrl: string): Promise<UniversalListing[]> {
+  async extractListings(html: string, sourceUrl: string): Promise<{ listings: UniversalListing[]; llmTimeMs: number }> {
     this.validateHtml(html);
 
     const $ = cheerio.load(html);
@@ -57,11 +57,13 @@ export class DealabsAdapter implements ISiteAdapter {
     );
 
     const listings: UniversalListing[] = [];
+    let llmTimeMs = 0;
     let failedCount = 0;
 
     for (const result of results) {
       if (result.status === 'fulfilled' && result.value !== null) {
-        listings.push(result.value);
+        listings.push(result.value.listing);
+        llmTimeMs += result.value.ollamaMs;
       } else {
         failedCount++;
       }
@@ -71,7 +73,7 @@ export class DealabsAdapter implements ISiteAdapter {
       this.logger.warn(`Failed to extract ${failedCount} of ${failedCount + listings.length} Dealabs listings`);
     }
     this.logger.log(`Extracted ${listings.length} Dealabs listings from ${sourceUrl}`);
-    return listings;
+    return { listings, llmTimeMs };
   }
 
   /**
@@ -83,15 +85,15 @@ export class DealabsAdapter implements ISiteAdapter {
     $element: Cheerio<Element>,
     sourceUrl: string,
     index: number,
-  ): Promise<UniversalListing | null> {
+  ): Promise<{ listing: UniversalListing; ollamaMs: number } | null> {
     const threadId = $element.attr('data-thread-id') ?? $element.attr('id') ?? 'unknown';
     try {
-      const listing = await this.llmExtraction.extract({
+      const result = await this.llmExtraction.extract({
         siteId: SiteSource.DEALABS,
         listingHtml: $.html($element),
         sourceUrl,
       });
-      return listing;
+      return result;
     } catch (error) {
       const errorMsg = (error as Error).message || 'Unknown error';
       this.logger.warn(

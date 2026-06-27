@@ -11,8 +11,8 @@ export const DEALABS_JSON_SCHEMA = {
     description:   { type: ['string', 'null'] },
     url:           { type: 'string' },
     imageUrl:      { type: ['string', 'null'] },
-    currentPrice:  { type: ['integer', 'null'] },
-    originalPrice: { type: ['integer', 'null'] },
+    currentPrice:  { type: ['number', 'null'] },
+    originalPrice: { type: ['number', 'null'] },
     merchant:      { type: ['string', 'null'] },
     publishedAt:   { type: ['string', 'null'] },
     temperature:   { type: ['integer', 'null'] },
@@ -24,6 +24,14 @@ export const DEALABS_JSON_SCHEMA = {
 function assertNullableString(val: unknown, field: string): string | null {
   if (val === null || val === undefined) return null;
   if (typeof val !== 'string') throw new LlmValidationError(`${field} must be a string or null`);
+  return val;
+}
+
+function assertNullableFloat(val: unknown, field: string): number | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val !== 'number') {
+    throw new LlmValidationError(`${field} must be a float or null`);
+  }
   return val;
 }
 
@@ -53,8 +61,8 @@ export function validateDealabsListing(raw: unknown): UniversalListing {
   if (typeof r['title'] !== 'string') throw new LlmValidationError('missing or invalid title');
   if (typeof r['url'] !== 'string') throw new LlmValidationError('missing or invalid url');
 
-  const currentPrice = assertNullableInt(r['currentPrice'], 'currentPrice');
-  const originalPrice = assertNullableInt(r['originalPrice'], 'originalPrice');
+  const currentPrice = assertNullableFloat(r['currentPrice'], 'currentPrice');
+  const originalPrice = assertNullableFloat(r['originalPrice'], 'originalPrice');
   const temperature = assertNullableInt(r['temperature'], 'temperature');
   const commentCount = assertNullableInt(r['commentCount'], 'commentCount');
   const description = assertNullableString(r['description'], 'description');

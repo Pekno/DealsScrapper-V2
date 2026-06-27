@@ -108,6 +108,9 @@ export class DashboardMetricsDto {
   @ApiProperty({ description: 'Total matches found' })
   totalMatches: number;
 
+  @ApiProperty({ description: 'Average Ollama LLM extraction time over last 7 days (ms)' })
+  avgOllamaExtractionTimeMs: number;
+
   @ApiProperty({ description: 'Number of active user sessions' })
   activeSessions: number;
 }
@@ -156,6 +159,17 @@ export class ScraperScrapingStatsDto {
 }
 
 /**
+ * LLM extraction stats from a scraper worker (live, resets on restart)
+ */
+export class ScraperLlmStatsDto {
+  @ApiProperty() totalExtractions: number;
+  @ApiProperty() successfulExtractions: number;
+  @ApiProperty() failedExtractions: number;
+  @ApiProperty() avgExtractionTimeMs: number;
+  @ApiProperty() lastExtractionTimeMs: number;
+}
+
+/**
  * Individual scraper worker details
  */
 export class ScraperWorkerDto {
@@ -188,6 +202,9 @@ export class ScraperWorkerDto {
 
   @ApiPropertyOptional({ description: 'Scraping statistics', type: ScraperScrapingStatsDto })
   scraping?: ScraperScrapingStatsDto;
+
+  @ApiPropertyOptional({ description: 'LLM extraction statistics (live, resets on restart)', type: ScraperLlmStatsDto })
+  llm?: ScraperLlmStatsDto;
 }
 
 /**

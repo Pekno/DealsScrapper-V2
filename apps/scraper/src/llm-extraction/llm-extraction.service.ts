@@ -15,9 +15,22 @@ export interface LlmExtractionRequest {
   sourceUrl: string;
 }
 
+export interface LlmExtractionResult {
+  listing: UniversalListing;
+  ollamaMs: number;
+}
+
+export interface LlmStats {
+  totalExtractions: number;
+  successfulExtractions: number;
+  failedExtractions: number;
+  avgExtractionTimeMs: number;
+  lastExtractionTimeMs: number;
+}
+
 type PendingTask = {
-  run: () => Promise<UniversalListing>;
-  resolve: (value: UniversalListing) => void;
+  run: () => Promise<LlmExtractionResult>;
+  resolve: (value: LlmExtractionResult) => void;
   reject: (reason: unknown) => void;
 };
 
@@ -27,6 +40,11 @@ export class LlmExtractionService {
   private readonly concurrency: number;
   private running = 0;
   private readonly queue: PendingTask[] = [];
+  private totalExtractions = 0;
+  private successfulExtractions = 0;
+  private failedExtractions = 0;
+  private totalSuccessTimeMs = 0;
+  private lastExtractionTimeMs = 0;
 
   constructor(
     private readonly ollama: OllamaService,
@@ -37,8 +55,8 @@ export class LlmExtractionService {
     this.concurrency = this.sharedConfig.getOllamaConfig().concurrency;
   }
 
-  async extract(req: LlmExtractionRequest): Promise<UniversalListing> {
-    return new Promise<UniversalListing>((resolve, reject) => {
+  async extract(req: LlmExtractionRequest): Promise<LlmExtractionResult> {
+    return new Promise<LlmExtractionResult>((resolve, reject) => {
       this.queue.push({ run: () => this.doExtract(req), resolve, reject });
       this.drain();
     });
@@ -58,13 +76,14 @@ export class LlmExtractionService {
     }
   }
 
-  private async doExtract(req: LlmExtractionRequest): Promise<UniversalListing> {
+  private async doExtract(req: LlmExtractionRequest): Promise<LlmExtractionResult> {
+    this.totalExtractions++;
     let site;
     try {
       site = this.registry.get(req.siteId);
     } catch (err) {
       if (err instanceof UnknownSiteError) {
-        this.logger.warn(`LLM extraction skipped — no site module registered for siteId=${req.siteId}`);
+        this.logger.warn(`LLM extraction skipped — no site module registered for siteId=${req.siteId}`, 'LlmExtractionService');
       }
       throw err;
     }
@@ -73,6 +92,7 @@ export class LlmExtractionService {
 
     this.logger.log(
       `Starting LLM extraction siteId=${req.siteId} markdownLength=${markdown.length} chars`,
+      'LlmExtractionService',
     );
 
     const started = Date.now();
@@ -84,36 +104,60 @@ export class LlmExtractionService {
         format: site.jsonSchema,
       });
     } catch (err) {
+      this.failedExtractions++;
       if (err instanceof OllamaTimeoutError) {
         this.logger.error(
           `Ollama timeout siteId=${req.siteId} elapsedMs=${err.elapsedMs} — ${err.message}`,
+          undefined,
+          'LlmExtractionService',
         );
       } else if (err instanceof OllamaUnavailableError) {
         this.logger.error(
           `Ollama unavailable siteId=${req.siteId} — ${err.message}`,
+          undefined,
+          'LlmExtractionService',
         );
       }
       throw err;
     }
 
     const ollamaMs = Date.now() - started;
-    this.logger.log(`Ollama responded siteId=${req.siteId} latencyMs=${ollamaMs} rawLength=${raw.length} chars`);
+    this.logger.log(`Ollama responded siteId=${req.siteId} latencyMs=${ollamaMs} rawLength=${raw.length} chars`, 'LlmExtractionService');
 
     const parsed: unknown = JSON.parse(raw);
     let listing: UniversalListing;
     try {
       listing = site.validate(parsed);
     } catch (err) {
+      this.failedExtractions++;
       if (err instanceof LlmValidationError) {
-        this.logger.warn(`LLM validation failed siteId=${req.siteId} — ${err.message}`);
+        this.logger.warn(`LLM validation failed siteId=${req.siteId} — ${err.message}`, 'LlmExtractionService');
       }
       throw err;
     }
 
+    this.successfulExtractions++;
+    this.totalSuccessTimeMs += ollamaMs;
+    this.lastExtractionTimeMs = ollamaMs;
+
     this.logger.debug(
       `LLM extraction succeeded siteId=${req.siteId} externalId=${listing.externalId} latencyMs=${Date.now() - started}`,
+      'LlmExtractionService',
     );
 
-    return listing;
+    return { listing, ollamaMs };
+  }
+
+  getStats(): LlmStats {
+    return {
+      totalExtractions: this.totalExtractions,
+      successfulExtractions: this.successfulExtractions,
+      failedExtractions: this.failedExtractions,
+      avgExtractionTimeMs:
+        this.successfulExtractions > 0
+          ? Math.round(this.totalSuccessTimeMs / this.successfulExtractions)
+          : 0,
+      lastExtractionTimeMs: this.lastExtractionTimeMs,
+    };
   }
 }

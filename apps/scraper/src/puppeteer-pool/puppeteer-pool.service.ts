@@ -283,7 +283,7 @@ export class PuppeteerPoolService implements OnModuleDestroy {
 
     const fixtureDir = path.join(
       process.cwd(),
-      'apps', 'scraper', 'src', 'llm-extraction', 'sites', siteId, 'fixtures',
+      'src', 'llm-extraction', 'sites', siteId, 'fixtures',
     );
 
     let cardFiles: string[];

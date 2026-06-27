@@ -13,6 +13,7 @@ import { PrismaService } from '@dealscrapper/database';
 import { PuppeteerPoolService } from '../puppeteer-pool/puppeteer-pool.service.js';
 import { OllamaService } from '../llm-extraction/ollama/ollama.service.js';
 import { OllamaUnavailableError } from '../llm-extraction/ollama/ollama.errors.js';
+import { LlmExtractionService } from '../llm-extraction/llm-extraction.service.js';
 
 /**
  * Custom health service for scraper with service-specific health checks
@@ -24,7 +25,8 @@ export class ScraperHealthService extends BaseHealthService {
     private readonly puppeteerPool: PuppeteerPoolService,
     private readonly prisma: PrismaService,
     private readonly sharedConfig: SharedConfigService,
-    private readonly ollamaService: OllamaService
+    private readonly ollamaService: OllamaService,
+    private readonly llmExtraction: LlmExtractionService
   ) {
     super({
       serviceName: 'scraper',
@@ -47,6 +49,7 @@ export class ScraperHealthService extends BaseHealthService {
   protected async getCustomHealthData(): Promise<Record<string, unknown>> {
     const poolStats = this.puppeteerPool.getStats();
     const ollamaStatus = await this.checkOllama();
+    const llmStats = this.llmExtraction.getStats();
 
     return {
       puppeteerPool: {
@@ -71,6 +74,13 @@ export class ScraperHealthService extends BaseHealthService {
         errorRate: await this.getErrorRate(),
       },
       ollama: ollamaStatus,
+      llm: {
+        totalExtractions: llmStats.totalExtractions,
+        successfulExtractions: llmStats.successfulExtractions,
+        failedExtractions: llmStats.failedExtractions,
+        avgExtractionTimeMs: llmStats.avgExtractionTimeMs,
+        lastExtractionTimeMs: llmStats.lastExtractionTimeMs,
+      },
     };
   }
 

@@ -38,7 +38,7 @@ describe('DealabsAdapter', () => {
 
   beforeEach(async () => {
     llmExtractionService = {
-      extract: jest.fn().mockResolvedValue(mockUniversalListing),
+      extract: jest.fn().mockResolvedValue({ listing: mockUniversalListing, ollamaMs: 100 }),
     } as unknown as jest.Mocked<LlmExtractionService>;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -144,8 +144,8 @@ describe('DealabsAdapter', () => {
         'https://www.dealabs.com/groupe/high-tech',
       );
       expect(llmExtractionService.extract).toHaveBeenCalledTimes(2);
-      expect(listings).toHaveLength(2);
-      expect(listings[0]).toEqual(mockUniversalListing);
+      expect(listings.listings).toHaveLength(2);
+      expect(listings.listings[0]).toEqual(mockUniversalListing);
     });
 
     it('should return empty array for HTML with no matching elements', async () => {
@@ -153,7 +153,7 @@ describe('DealabsAdapter', () => {
         '<div data-thread-id="x"></div>',
         'https://www.dealabs.com/groupe/high-tech',
       );
-      expect(listings).toHaveLength(0);
+      expect(listings.listings).toHaveLength(0);
       expect(llmExtractionService.extract).not.toHaveBeenCalled();
     });
 
@@ -170,7 +170,7 @@ describe('DealabsAdapter', () => {
         html,
         'https://www.dealabs.com/groupe/high-tech',
       );
-      expect(listings).toHaveLength(1);
+      expect(listings.listings).toHaveLength(1);
     });
   });
 

@@ -19,6 +19,7 @@ import { NotificationModule } from './notification/notification.module.js';
 // Removed CategoryMonitorModule - monitoring handled by scheduler
 import { ScraperHealthService } from './health/scraper-health.service.js';
 import { LlmExtractionModule } from './llm-extraction/llm-extraction.module.js';
+import { LlmExtractionService } from './llm-extraction/llm-extraction.service.js';
 import { OllamaModule } from './llm-extraction/ollama/ollama.module.js';
 import { OllamaService } from './llm-extraction/ollama/ollama.service.js';
 import { DealElasticSearchModule } from './elasticsearch/elasticsearch.module.js';
@@ -96,7 +97,7 @@ import { WorkerRegistrationModule } from './worker-registration/worker-registrat
     }),
     // Shared health module with scraper-specific health service
     SharedHealthModule.forRootAsync({
-      imports: [OllamaModule],
+      imports: [LlmExtractionModule],
       useFactory: (sharedConfig: SharedConfigService) => ({
         serviceName: 'scraper',
         version: sharedConfig.get('APP_VERSION'),
@@ -108,9 +109,10 @@ import { WorkerRegistrationModule } from './worker-registration/worker-registrat
           puppeteerPool: PuppeteerPoolService,
           prisma: PrismaService,
           sharedConfig: SharedConfigService,
-          ollamaService: OllamaService
-        ) => new ScraperHealthService(puppeteerPool, prisma, sharedConfig, ollamaService),
-        inject: [PuppeteerPoolService, PrismaService, SharedConfigService, OllamaService],
+          ollamaService: OllamaService,
+          llmExtraction: LlmExtractionService
+        ) => new ScraperHealthService(puppeteerPool, prisma, sharedConfig, ollamaService, llmExtraction),
+        inject: [PuppeteerPoolService, PrismaService, SharedConfigService, OllamaService, LlmExtractionService],
       },
     }),
     PrismaModule,

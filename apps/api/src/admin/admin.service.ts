@@ -300,6 +300,7 @@ export class AdminService {
         lastHeartbeat: worker.lastHeartbeat,
         browserPool: data?.puppeteerPool as ScraperWorkerDto['browserPool'],
         scraping: data?.scraping as ScraperWorkerDto['scraping'],
+        llm: data?.llm as ScraperWorkerDto['llm'],
       };
     } catch {
       return {
@@ -422,8 +423,10 @@ export class AdminService {
     totalFilters: number;
     totalMatches: number;
     activeSessions: number;
+    avgOllamaExtractionTimeMs: number;
   }> {
-    const [totalUsers, totalFilters, totalMatches, activeSessions] =
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [totalUsers, totalFilters, totalMatches, activeSessions, avgOllamaResult] =
       await Promise.all([
         this.prisma.user.count(),
         this.prisma.filter.count(),
@@ -431,9 +434,23 @@ export class AdminService {
         this.prisma.userSession.count({
           where: { expiresAt: { gt: new Date() } },
         }),
+        this.prisma.scrapingJob.aggregate({
+          _avg: { ollamaExtractionTimeMs: true },
+          where: {
+            status: 'completed',
+            ollamaExtractionTimeMs: { not: null },
+            completedAt: { gte: sevenDaysAgo },
+          },
+        }),
       ]);
 
-    return { totalUsers, totalFilters, totalMatches, activeSessions };
+    return {
+      totalUsers,
+      totalFilters,
+      totalMatches,
+      activeSessions,
+      avgOllamaExtractionTimeMs: Math.round(avgOllamaResult._avg.ollamaExtractionTimeMs ?? 0),
+    };
   }
 
   /**

@@ -96,18 +96,20 @@ export class OllamaService {
         if (isRetry) {
           this.logger.warn(
             `Ollama returned invalid JSON on retry, giving up — snippet: ${raw.slice(0, 100)}`,
+            'OllamaService',
           );
           throw new SyntaxError(`Invalid JSON from Ollama: ${raw.slice(0, 200)}`);
         }
         this.logger.warn(
           `Ollama returned invalid JSON, retrying once — snippet: ${raw.slice(0, 100)}`,
+          'OllamaService',
         );
         return this.attemptGenerate(req, true);
       }
     } catch (err) {
       if (controller.signal.aborted && !(req.signal?.aborted ?? false)) {
         const elapsed = Date.now() - started;
-        this.logger.error(`Ollama request timed out model=${this.model} elapsedMs=${elapsed}`);
+        this.logger.error(`Ollama request timed out model=${this.model} elapsedMs=${elapsed}`, undefined, 'OllamaService');
         throw new OllamaTimeoutError(elapsed);
       }
       if (err instanceof SyntaxError || err instanceof OllamaUnavailableError || err instanceof OllamaTimeoutError) {
@@ -116,7 +118,7 @@ export class OllamaService {
       if (err instanceof Error) {
         if (err.name === 'AbortError' || err.message.includes('abort') || err.message.includes('timeout')) {
           const elapsed = Date.now() - started;
-          this.logger.error(`Ollama request timed out model=${this.model} elapsedMs=${elapsed}`);
+          this.logger.error(`Ollama request timed out model=${this.model} elapsedMs=${elapsed}`, undefined, 'OllamaService');
           throw new OllamaTimeoutError(elapsed);
         }
         if (
@@ -125,12 +127,14 @@ export class OllamaService {
           err.message.includes('fetch failed') ||
           err.message.includes('network')
         ) {
-          this.logger.error(`Ollama unreachable model=${this.model} — ${err.message}`);
+          this.logger.error(`Ollama unreachable model=${this.model} — ${err.message}`, undefined, 'OllamaService');
           throw new OllamaUnavailableError(err);
         }
       }
       this.logger.error(
         `Ollama unexpected failure model=${this.model} — ${err instanceof Error ? err.message : String(err)}`,
+        undefined,
+        'OllamaService',
       );
       throw new OllamaUnavailableError(err);
     } finally {

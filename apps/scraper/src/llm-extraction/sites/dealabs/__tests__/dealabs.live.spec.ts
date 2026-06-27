@@ -6,7 +6,6 @@ import { SharedConfigModule } from '@dealscrapper/shared-config';
 import { loadDealabsFixtures } from '../fixtures/index.js';
 import { validateDealabsListing } from '../dealabs.schema.js';
 import type { LlmExample } from '../../site.interface.js';
-import type { UniversalListing } from '@dealscrapper/shared-types';
 import { SiteSource } from '@dealscrapper/shared-types';
 
 const RUN_LIVE = process.env['LLM_TESTS'] === '1';
@@ -47,27 +46,26 @@ const RUN_LIVE = process.env['LLM_TESTS'] === '1';
       const example = examples[i];
       if (!example) throw new Error(`Fixture ${i} not loaded`);
 
-      const result: UniversalListing = await service.extract({
+      const { listing: result } = await service.extract({
         siteId: SiteSource.DEALABS,
         listingHtml: `<html><body>${example.markdown}</body></html>`,
         sourceUrl: 'https://www.dealabs.com/groupe/high-tech',
       });
 
       expect(() => validateDealabsListing(result)).not.toThrow();
-      expect(result.externalId).toBeTruthy();
-      expect(result.title).toBeTruthy();
-      expect(result.url).toBeTruthy();
 
-      if (result.currentPrice !== null) {
-        expect(result.currentPrice).toBeGreaterThanOrEqual(0);
-        expect(result.currentPrice).toBeLessThan(100_000_00);
-      }
+      const expected = example.expectedOutput;
+      const expectedData = expected.siteSpecificData as { temperature: number | null; commentCount: number | null };
+      const resultData = result.siteSpecificData as { temperature: number | null; commentCount: number | null };
 
-      const data = result.siteSpecificData as { temperature?: number; commentCount?: number };
-      if (typeof data.temperature === 'number') {
-        expect(data.temperature).toBeGreaterThanOrEqual(0);
-        expect(data.temperature).toBeLessThan(100_000);
-      }
+      expect(result.externalId).toBe(expected.externalId);
+      expect(result.title).toBe(expected.title);
+      expect(result.url).toBe(expected.url);
+      expect(result.currentPrice).toBe(expected.currentPrice);
+      expect(result.originalPrice).toBe(expected.originalPrice);
+      expect(result.merchant).toBe(expected.merchant);
+      if (expectedData.temperature !== null) expect(resultData.temperature).toBe(expectedData.temperature);
+      if (expectedData.commentCount !== null) expect(resultData.commentCount).toBe(expectedData.commentCount);
     }, 60_000);
   }
 });

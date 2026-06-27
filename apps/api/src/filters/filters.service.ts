@@ -351,6 +351,8 @@ export class FiltersService {
     // Note: enabledSites removed - sites are now derived from categories
     const matchingCriteriaChanged = filterExpressionChanged || categoriesChanged;
 
+    const oldCategoryIds = existingFilter.categories.map((fc) => fc.categoryId);
+
     try {
       const updatedFilter = await this.prisma.filter.update({
         where: { id: filterId },
@@ -398,6 +400,16 @@ export class FiltersService {
         (fc) => fc.category.id
       );
       await this.notifySchedulerService(filterId, 'updated', categoryIds);
+
+      // Notify scheduler to clean up jobs for categories that were removed
+      if (updateFilterDto.categoryIds !== undefined) {
+        const removedCategoryIds = oldCategoryIds.filter(
+          (id) => !categoryIds.includes(id)
+        );
+        if (removedCategoryIds.length > 0) {
+          await this.notifySchedulerService(filterId, 'deleted', removedCategoryIds);
+        }
+      }
 
       // If matching criteria changed, re-evaluate all matches
       if (matchingCriteriaChanged) {

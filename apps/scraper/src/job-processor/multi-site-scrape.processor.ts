@@ -13,6 +13,7 @@ import { PuppeteerPoolService } from '../puppeteer-pool/puppeteer-pool.service.j
 import { FilterMatchingService } from '../filter-matching/filter-matching.service.js';
 import { CategoryDiscoveryAdapterRegistry } from '../category-discovery/category-discovery-adapter.registry.js';
 import { CategoryRepository } from '../repositories/category.repository.js';
+import { ScrapingJobRepository } from '../repositories/scraping-job.repository.js';
 
 /**
  * Job data for multi-site scraping.
@@ -28,6 +29,8 @@ export interface MultiSiteScrapeJobData {
   timestamp?: string;
   priority?: number;
   maxPages?: number;
+  /** ID of the ScheduledJob that triggered this job, used to record ScrapingJob execution history */
+  scheduledJobId?: string;
   /** Optimized URL query string from filter constraints (e.g. "temperatureFrom=95&sortBy=new") */
   optimizedQuery?: string;
 }
@@ -120,6 +123,7 @@ export class DealabsScrapeProcessor {
     private readonly filterMatchingService: FilterMatchingService,
     private readonly categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
     private readonly categoryRepository: CategoryRepository,
+    private readonly scrapingJobRepository: ScrapingJobRepository,
   ) {}
 
   @Process('scrape')
@@ -133,13 +137,21 @@ export class DealabsScrapeProcessor {
       job.data.optimizedQuery,
     );
 
+    const scrapingJob = job.data.scheduledJobId
+      ? await this.scrapingJobRepository.createProcessingJob(job.data.scheduledJobId)
+      : null;
+
     this.logger.log(
       `🔄 Processing Dealabs scrape job [${job.id}] for category: ${categorySlug} (${categoryId}) (site: ${siteId})`,
     );
 
+    let scrapingTimeMs: number | undefined;
+
     try {
-      // Fetch HTML using Puppeteer
+      // Fetch HTML using Puppeteer — timed separately
+      const fetchStart = Date.now();
       const html = await this.puppeteerPool.fetchPage(categoryUrl);
+      scrapingTimeMs = Date.now() - fetchStart;
 
       // Extract listings using adapter
       const result = await this.unifiedExtractionService.scrapeCategoryFromHtml(
@@ -159,8 +171,12 @@ export class DealabsScrapeProcessor {
       const extractedIds = new Set(result.listings.map((l) => l.externalId));
       await this.dealPersistenceService.markHiddenExpiredDeals(categorySlug, extractedIds, adapter);
 
-      // Run filter matching on ALL articles (both new and existing)
-      const allArticles = [...saveResult.created, ...saveResult.existing];
+      // Run filter matching on ALL articles (both new and existing), deduped by id
+      const allArticles = [
+        ...new Map(
+          [...saveResult.created, ...saveResult.existing].map((a) => [a.id, a]),
+        ).values(),
+      ];
       if (allArticles.length > 0) {
         this.logger.log(
           `🔍 Running filter matching on ${allArticles.length} articles (${saveResult.created.length} new, ${saveResult.existing.length} existing)`,
@@ -170,11 +186,21 @@ export class DealabsScrapeProcessor {
 
       const duration = Date.now() - startTime;
 
+      if (scrapingJob) {
+        await this.scrapingJobRepository.markCompleted(scrapingJob.id, {
+          dealsFound: saveResult.created.length,
+          dealsProcessed: saveResult.indexed ?? saveResult.created.length,
+          executionTimeMs: duration,
+          scrapingTimeMs,
+          ollamaExtractionTimeMs: result.llmTimeMs,
+        });
+      }
+
       this.logger.log(
         `✅ Completed Dealabs scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
         `   📊 Extracted: ${result.listings.length}, Saved: ${saveResult.created.length}, ` +
         `Skipped: ${saveResult.skipped}, Indexed: ${saveResult.indexed}\n` +
-        `   ⏱️  Duration: ${duration}ms`,
+        `   ⏱️  Duration: ${duration}ms (scraping: ${scrapingTimeMs}ms, LLM: ${result.llmTimeMs}ms)`,
       );
 
       return {
@@ -191,6 +217,10 @@ export class DealabsScrapeProcessor {
       const duration = Date.now() - startTime;
       const errorMessage = extractErrorMessage(error);
       const errorStack = (error as Error).stack || 'No stack trace';
+
+      if (scrapingJob) {
+        await this.scrapingJobRepository.markFailed(scrapingJob.id, errorMessage, duration, scrapingTimeMs);
+      }
 
       this.logger.error(
         `❌ Failed Dealabs scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
@@ -290,6 +320,7 @@ export class VintedScrapeProcessor {
     private readonly filterMatchingService: FilterMatchingService,
     private readonly categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
     private readonly categoryRepository: CategoryRepository,
+    private readonly scrapingJobRepository: ScrapingJobRepository,
   ) {}
 
   @Process('scrape')
@@ -303,13 +334,21 @@ export class VintedScrapeProcessor {
       job.data.optimizedQuery,
     );
 
+    const scrapingJob = job.data.scheduledJobId
+      ? await this.scrapingJobRepository.createProcessingJob(job.data.scheduledJobId)
+      : null;
+
     this.logger.log(
       `🔄 Processing Vinted scrape job [${job.id}] for category: ${categorySlug} (${categoryId}) (site: ${siteId})`,
     );
 
+    let scrapingTimeMs: number | undefined;
+
     try {
-      // Fetch HTML using Puppeteer
+      // Fetch HTML using Puppeteer — timed separately
+      const fetchStart = Date.now();
       const html = await this.puppeteerPool.fetchPage(categoryUrl);
+      scrapingTimeMs = Date.now() - fetchStart;
 
       // Extract listings using adapter
       const result = await this.unifiedExtractionService.scrapeCategoryFromHtml(
@@ -329,8 +368,12 @@ export class VintedScrapeProcessor {
       const extractedIds = new Set(result.listings.map((l) => l.externalId));
       await this.dealPersistenceService.markHiddenExpiredDeals(categorySlug, extractedIds, adapter);
 
-      // Run filter matching on ALL articles (both new and existing)
-      const allArticles = [...saveResult.created, ...saveResult.existing];
+      // Run filter matching on ALL articles (both new and existing), deduped by id
+      const allArticles = [
+        ...new Map(
+          [...saveResult.created, ...saveResult.existing].map((a) => [a.id, a]),
+        ).values(),
+      ];
       if (allArticles.length > 0) {
         this.logger.log(
           `🔍 Running filter matching on ${allArticles.length} articles (${saveResult.created.length} new, ${saveResult.existing.length} existing)`,
@@ -340,11 +383,21 @@ export class VintedScrapeProcessor {
 
       const duration = Date.now() - startTime;
 
+      if (scrapingJob) {
+        await this.scrapingJobRepository.markCompleted(scrapingJob.id, {
+          dealsFound: saveResult.created.length,
+          dealsProcessed: saveResult.indexed ?? saveResult.created.length,
+          executionTimeMs: duration,
+          scrapingTimeMs,
+          ollamaExtractionTimeMs: result.llmTimeMs,
+        });
+      }
+
       this.logger.log(
         `✅ Completed Vinted scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
         `   📊 Extracted: ${result.listings.length}, Saved: ${saveResult.created.length}, ` +
         `Skipped: ${saveResult.skipped}, Indexed: ${saveResult.indexed}\n` +
-        `   ⏱️  Duration: ${duration}ms`,
+        `   ⏱️  Duration: ${duration}ms (scraping: ${scrapingTimeMs}ms, LLM: ${result.llmTimeMs}ms)`,
       );
 
       return {
@@ -361,6 +414,10 @@ export class VintedScrapeProcessor {
       const duration = Date.now() - startTime;
       const errorMessage = extractErrorMessage(error);
       const errorStack = (error as Error).stack || 'No stack trace';
+
+      if (scrapingJob) {
+        await this.scrapingJobRepository.markFailed(scrapingJob.id, errorMessage, duration, scrapingTimeMs);
+      }
 
       this.logger.error(
         `❌ Failed Vinted scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
@@ -460,6 +517,7 @@ export class LeBonCoinScrapeProcessor {
     private readonly filterMatchingService: FilterMatchingService,
     private readonly categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
     private readonly categoryRepository: CategoryRepository,
+    private readonly scrapingJobRepository: ScrapingJobRepository,
   ) {}
 
   @Process('scrape')
@@ -473,13 +531,21 @@ export class LeBonCoinScrapeProcessor {
       job.data.optimizedQuery,
     );
 
+    const scrapingJob = job.data.scheduledJobId
+      ? await this.scrapingJobRepository.createProcessingJob(job.data.scheduledJobId)
+      : null;
+
     this.logger.log(
       `🔄 Processing LeBonCoin scrape job [${job.id}] for category: ${categorySlug} (${categoryId}) (site: ${siteId})`,
     );
 
+    let scrapingTimeMs: number | undefined;
+
     try {
-      // Fetch HTML using Puppeteer
+      // Fetch HTML using Puppeteer — timed separately
+      const fetchStart = Date.now();
       const html = await this.puppeteerPool.fetchPage(categoryUrl);
+      scrapingTimeMs = Date.now() - fetchStart;
 
       // Extract listings using adapter
       const result = await this.unifiedExtractionService.scrapeCategoryFromHtml(
@@ -499,8 +565,12 @@ export class LeBonCoinScrapeProcessor {
       const extractedIds = new Set(result.listings.map((l) => l.externalId));
       await this.dealPersistenceService.markHiddenExpiredDeals(categorySlug, extractedIds, adapter);
 
-      // Run filter matching on ALL articles (both new and existing)
-      const allArticles = [...saveResult.created, ...saveResult.existing];
+      // Run filter matching on ALL articles (both new and existing), deduped by id
+      const allArticles = [
+        ...new Map(
+          [...saveResult.created, ...saveResult.existing].map((a) => [a.id, a]),
+        ).values(),
+      ];
       if (allArticles.length > 0) {
         this.logger.log(
           `🔍 Running filter matching on ${allArticles.length} articles (${saveResult.created.length} new, ${saveResult.existing.length} existing)`,
@@ -510,11 +580,21 @@ export class LeBonCoinScrapeProcessor {
 
       const duration = Date.now() - startTime;
 
+      if (scrapingJob) {
+        await this.scrapingJobRepository.markCompleted(scrapingJob.id, {
+          dealsFound: saveResult.created.length,
+          dealsProcessed: saveResult.indexed ?? saveResult.created.length,
+          executionTimeMs: duration,
+          scrapingTimeMs,
+          ollamaExtractionTimeMs: result.llmTimeMs,
+        });
+      }
+
       this.logger.log(
         `✅ Completed LeBonCoin scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
         `   📊 Extracted: ${result.listings.length}, Saved: ${saveResult.created.length}, ` +
         `Skipped: ${saveResult.skipped}, Indexed: ${saveResult.indexed}\n` +
-        `   ⏱️  Duration: ${duration}ms`,
+        `   ⏱️  Duration: ${duration}ms (scraping: ${scrapingTimeMs}ms, LLM: ${result.llmTimeMs}ms)`,
       );
 
       return {
@@ -531,6 +611,10 @@ export class LeBonCoinScrapeProcessor {
       const duration = Date.now() - startTime;
       const errorMessage = extractErrorMessage(error);
       const errorStack = (error as Error).stack || 'No stack trace';
+
+      if (scrapingJob) {
+        await this.scrapingJobRepository.markFailed(scrapingJob.id, errorMessage, duration, scrapingTimeMs);
+      }
 
       this.logger.error(
         `❌ Failed LeBonCoin scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +

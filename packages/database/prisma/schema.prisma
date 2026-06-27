@@ -361,9 +361,11 @@ model ScrapingJob {
   error       String?
 
   // Execution Results
-  dealsFound      Int? // Number of deals found in this execution
-  dealsProcessed  Int? // Number of deals successfully processed
-  executionTimeMs Int? // Time taken for execution
+  dealsFound             Int? // Number of deals found in this execution
+  dealsProcessed         Int? // Number of deals successfully processed
+  executionTimeMs        Int? // Total job duration
+  scrapingTimeMs         Int? // Time spent fetching pages with Puppeteer
+  ollamaExtractionTimeMs Int? // Time spent on Ollama LLM extraction
 
   // Metadata (for any additional execution-specific data)
   metadata  Json?

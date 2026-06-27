@@ -24,9 +24,9 @@ export interface ISiteAdapter {
    * Extracts listings from HTML page.
    * @param html - Raw HTML content
    * @param sourceUrl - URL of the scraped page
-   * @returns Array of universal listings with site-specific data
+   * @returns Listings and total LLM extraction time in ms (0 for non-LLM adapters)
    */
-  extractListings(html: string, sourceUrl: string): Promise<UniversalListing[]>;
+  extractListings(html: string, sourceUrl: string): Promise<{ listings: UniversalListing[]; llmTimeMs: number }>;
 
   /**
    * Builds category URL for scraping.
