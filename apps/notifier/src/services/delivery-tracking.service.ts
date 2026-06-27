@@ -79,6 +79,24 @@ export class DeliveryTrackingService {
       this.logger,
       'creating delivery record',
       async () => {
+        const matchId = delivery.notificationPayload.matchId ?? null;
+
+        // Idempotency: a retried Bull job must not re-create the Notification
+        // (and re-send) for the same (userId, matchId). Only DEAL_MATCH payloads
+        // carry a matchId; SYSTEM/verification/password-reset/digest do not.
+        if (matchId !== null) {
+          const existing = await this.prisma.notification.findFirst({
+            where: { userId: delivery.userId, matchId },
+          });
+
+          if (existing) {
+            this.logger.debug(
+              `⏭️ Skipping duplicate delivery for user ${delivery.userId} matchId ${matchId} (existing ${existing.id})`
+            );
+            return existing.id;
+          }
+        }
+
         const deliveryId = this.generateDeliveryId();
 
         const fullDelivery: NotificationDelivery = {

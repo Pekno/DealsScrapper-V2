@@ -168,6 +168,17 @@ describe('NotificationService', () => {
       expect(queueCall[2].priority).toBe(1);
     });
 
+    it('should set a deterministic jobId so retried jobs cannot duplicate the notification', async () => {
+      mockPrismaService.match.update.mockResolvedValue(mockMatch);
+
+      await service.queueExternalNotification(mockMatch);
+
+      // Queue-level dedup: a deterministic jobId means Bull ignores a duplicate
+      // add for the same match while the job exists/is retained.
+      const queueCall = externalNotificationQueue.add.mock.calls[0];
+      expect(queueCall[2].jobId).toBe(`deal-match-${mockMatch.id}`);
+    });
+
     it('should prevent duplicate notifications to avoid user annoyance', async () => {
       mockPrismaService.match.update.mockResolvedValue(mockMatch);
 

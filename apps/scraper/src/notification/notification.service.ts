@@ -46,6 +46,7 @@ export type NotificationPriorityLegacy = 'high' | 'normal' | 'low';
  * Queue job options configuration
  */
 export interface NotificationJobOptions {
+  readonly jobId: string;
   readonly priority: number;
   readonly attempts: number;
   readonly backoff: {
@@ -78,7 +79,7 @@ export class NotificationService {
       );
 
       const notificationPayload = this.createNotificationPayload(match);
-      const jobOptions = this.createJobOptions(notificationPayload.priority);
+      const jobOptions = this.createJobOptions(match.id, notificationPayload.priority);
 
       await this.externalNotificationQueue.add(
         'deal-match-found',
@@ -130,13 +131,18 @@ export class NotificationService {
 
   /**
    * Creates queue job options based on notification priority
+   * @param matchId - The unique identifier of the match, used as a deterministic
+   *   Bull jobId so a retried upstream handler cannot enqueue a duplicate
+   *   notification for the same match while the job still exists/is retained
    * @param priority - Notification priority level
    * @returns Queue job configuration options
    */
   private createJobOptions(
+    matchId: string,
     priority: NotificationPriority
   ): NotificationJobOptions {
     return {
+      jobId: `deal-match-${matchId}`,
       priority: QUEUE_PRIORITIES[priority],
       attempts: 3,
       backoff: {
@@ -173,9 +179,13 @@ export class NotificationService {
     } catch (error) {
       const errorMessage = extractErrorMessage(error);
       this.logger.error(
-        `Failed to mark match ${matchId} as notified: ${errorMessage}`
+        `Failed to persist 'notified' flag for match ${matchId}: ${errorMessage}. ` +
+          `Notification was already queued; NOT re-throwing to avoid re-queuing. ` +
+          `If the upstream job is retried, this match may re-fire (duplicate notification) ` +
+          `because the notified flag was not written.`
       );
-      // Don't throw - notification was already queued successfully
+      // Intentionally do not re-throw: the notification was already queued, so
+      // re-throwing would trigger an upstream retry that re-sends the same match.
     }
   }
 }

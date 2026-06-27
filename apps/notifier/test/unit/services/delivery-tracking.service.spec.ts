@@ -30,6 +30,7 @@ describe('DeliveryTrackingService', () => {
       notification: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
@@ -92,6 +93,29 @@ describe('DeliveryTrackingService', () => {
 
       expect(result).toBeDefined();
       expect(prismaService.notification.create).toHaveBeenCalled();
+    });
+
+    it('should skip create and return existing id for duplicate (userId, matchId)', async () => {
+      // Arrange: a retried job carrying the same matchId; an existing row is found
+      const deliveryData = {
+        userId: 'user-123',
+        type: 'deal-match' as const,
+        notificationPayload: { matchId: 'match-456', dealId: 'deal-123' },
+        priority: 'normal' as const,
+      };
+
+      const existing = { ...mockNotification, id: 'existing-notif-1', matchId: 'match-456' };
+      prismaService.notification.findFirst.mockResolvedValue(existing);
+
+      // Act
+      const result = await service.createDelivery(deliveryData);
+
+      // Assert: returns existing id and does NOT re-create
+      expect(result).toBe('existing-notif-1');
+      expect(prismaService.notification.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'user-123', matchId: 'match-456' },
+      });
+      expect(prismaService.notification.create).not.toHaveBeenCalled();
     });
   });
 
