@@ -639,19 +639,21 @@ export class RuleEngineService {
 
   /**
    * Create result for expressions with no rules defined.
+   * Phase 7 convergence (V2): an empty rule set matches NOTHING, aligning with
+   * the API engine. A filter with no rules should never spam every deal.
    */
   private createNoRulesResult(): RuleEvaluationResult {
     return {
-      matches: true,
-      score: RULE_ENGINE_CONFIG.SCORING.NO_RULES_SCORE,
+      matches: false,
+      score: 0,
       maxPossibleScore: RULE_ENGINE_CONFIG.SCORING.NO_RULES_SCORE,
       details: [
         {
           rule: { field: 'title', operator: 'EQUALS', value: true },
-          matches: true,
-          score: RULE_ENGINE_CONFIG.SCORING.NO_RULES_SCORE,
+          matches: false,
+          score: 0,
           weight: RULE_ENGINE_CONFIG.DEFAULTS.WEIGHT,
-          reason: 'No rules defined - matches all',
+          reason: 'No rules defined - matches nothing',
         },
       ],
     };

@@ -22,13 +22,12 @@
  *      API     TODAY: NAND semantics — true.
  *      Chosen-correct target: NOR (none-true) => matches:false.
  *
- *  V2 — empty-filter
+ *  V2 — empty-filter  [CONVERGED — Phase 7]
  *      Expression: { rules: [] }.
- *      Scraper TODAY: createNoRulesResult() => matches:TRUE, score 100.
- *        *** SURPRISE vs the naive "matches-nothing" expectation: the scraper
- *        treats an empty rule set as "matches all". ***
+ *      Scraper NOW: createNoRulesResult() => matches:FALSE, score 0 (converged).
+ *        (Previously matches:TRUE/score 100 — "matches all" — now matches-nothing.)
  *      API     TODAY: matches-nothing => false.
- *      Chosen-correct target: matches-nothing => matches:false.
+ *      Chosen-correct target: matches-nothing => matches:false. ACHIEVED.
  *
  *  V3 — null-field-not-equals
  *      Expression: deal.merchant absent; merchant '!=' 'Amazon'.
@@ -117,17 +116,6 @@ describe('filter-engine divergence vectors (scraper)', () => {
       expect(result.matches).toBe(false);
     });
 
-    it('V2 empty-filter: empty rules => matches:TRUE (SURPRISE — "matches all")', async () => {
-      const expression: RuleBasedFilterExpression = { rules: [] };
-
-      const result = await service.evaluateFilterExpression(expression, baseDeal);
-
-      // SURPRISE: scraper's createNoRulesResult() returns matches:true, score 100,
-      // i.e. an empty filter matches everything — it does NOT match nothing.
-      expect(result.matches).toBe(true);
-      expect(result.score).toBe(100);
-    });
-
     it('V3 null-field-not-equals: absent merchant != "Amazon" => matches:TRUE', async () => {
       const expression: RuleBasedFilterExpression = {
         rules: [{ field: 'merchant', operator: '!=', value: 'Amazon' }],
@@ -205,12 +193,13 @@ describe('filter-engine divergence vectors (scraper)', () => {
       expect(result.matches).toBe(false);
     });
 
-    it.skip('V2 empty-filter target: empty rules => matches-nothing => matches:false', async () => {
+    it('V2 empty-filter target: empty rules => matches-nothing => matches:false', async () => {
       const expression: RuleBasedFilterExpression = { rules: [] };
 
       const result = await service.evaluateFilterExpression(expression, baseDeal);
 
       expect(result.matches).toBe(false);
+      expect(result.score).toBe(0);
     });
 
     // V3 target is NOT LOCKED by the plan — null-field semantics are undecided.
