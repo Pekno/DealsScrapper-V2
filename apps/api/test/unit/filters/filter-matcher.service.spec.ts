@@ -1127,7 +1127,7 @@ describe('FilterMatcherService', () => {
         expression,
         mockDealabsArticle,
       );
-      // Total score: 2.0 + 3.0 + 1.0 = 6.0, threshold is 5.0
+      // Weighted is normalized 0-100 (Phase 7 V6): all rules pass = 6.0/6.0 = 100% >= 5
       expect(result).toBe(true);
     });
 
@@ -1137,7 +1137,7 @@ describe('FilterMatcherService', () => {
           { field: 'currentPrice', operator: '<=', value: 1500, weight: 1.0 }, // Passes
           { field: 'temperature', operator: '>=', value: 200, weight: 3.0 }, // Fails
         ],
-        minScore: 3.0,
+        minScore: 50, // 50%
         scoreMode: 'weighted',
         matchLogic: 'AND',
       };
@@ -1146,7 +1146,7 @@ describe('FilterMatcherService', () => {
         expression,
         mockDealabsArticle,
       );
-      // Total score: 1.0 (only first rule passes), threshold is 3.0
+      // Weighted is normalized 0-100 (Phase 7 V6): earned 1.0 / total 4.0 = 25% < 50%
       expect(result).toBe(false);
     });
 
@@ -1226,7 +1226,7 @@ describe('FilterMatcherService', () => {
         expression,
         mockDealabsArticle,
       );
-      // Default weight 1.0 each: 1.0 + 1.0 = 2.0 >= 1.5
+      // Default weight 1.0 each, both pass: 2.0/2.0 = 100% >= 1.5 (normalized, Phase 7 V6)
       expect(result).toBe(true);
     });
 
@@ -1246,7 +1246,7 @@ describe('FilterMatcherService', () => {
         expression,
         mockDealabsArticle,
       );
-      // Earned: 2.0 + 2.0 = 4.0 >= 3.0
+      // Normalized (Phase 7 V6): earned 4.0 / total 5.0 = 80% >= 3
       expect(result).toBe(true);
     });
 

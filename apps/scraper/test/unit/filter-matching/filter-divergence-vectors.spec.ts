@@ -52,13 +52,13 @@
  *      API     TODAY: dedicated date BETWEEN branch => true.
  *      Chosen-correct target: true.
  *
- *  V6 — weighted-score-scale
+ *  V6 — weighted-score-scale  [CONVERGED — Phase 7]
  *      Expression: scoreMode 'weighted', minScore 0, two weight-1.0 rules, one
  *        matches one doesn't.
  *      Scraper TODAY: score normalized to 0-100 => totalScore 100 / maxPossible
  *        200 * 100 = 50.
- *      API     TODAY: raw earned weight (un-normalized).
- *      Chosen-correct target: normalized 0-100 => score 50.
+ *      API     NOW: 'weighted' normalized 0-100 (converged; was raw earned weight).
+ *      Chosen-correct target: normalized 0-100 => score 50. ACHIEVED both sides.
  * ============================================================================
  */
 
@@ -156,22 +156,6 @@ describe('filter-engine divergence vectors (scraper)', () => {
       // and the date actually falls inside the range => true.
       expect(result.matches).toBe(true);
     });
-
-    it('V6 weighted-score-scale: one of two weight-1.0 rules matches => score 50 (normalized 0-100)', async () => {
-      const expression: RuleBasedFilterExpression = {
-        scoreMode: 'weighted',
-        minScore: 0,
-        rules: [
-          { field: 'temperature', operator: '>=', value: 100, weight: 1.0 },
-          { field: 'temperature', operator: '>=', value: 99999, weight: 1.0 },
-        ],
-      };
-
-      const result = await service.evaluateFilterExpression(expression, baseDeal);
-
-      // totalScore 100 / maxPossibleScore 200 * 100 = 50 (normalized to 0-100).
-      expect(result.score).toBe(50);
-    });
   });
 
   // ==========================================================================
@@ -231,7 +215,7 @@ describe('filter-engine divergence vectors (scraper)', () => {
       expect(result.matches).toBe(true);
     });
 
-    it.skip('V6 weighted-score-scale target: normalized 0-100 => score 50', async () => {
+    it('V6 weighted-score-scale target: normalized 0-100 => score 50 (CONVERGED both engines)', async () => {
       const expression: RuleBasedFilterExpression = {
         scoreMode: 'weighted',
         minScore: 0,

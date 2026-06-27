@@ -52,13 +52,16 @@
  *   scraper current  : may work via Number() coercion of dates -> TRUE
  *   chosen-correct   : TRUE   (already equals API current)
  *
- * V6 — weighted-score-scale (SCORING divergence, NOT observable on the boolean path)
- *   `FilterMatcherService.calculateScore` is private and `evaluateFilterExpression`
- *   returns only a boolean, so the score *scale* cannot be observed through the
- *   public boolean API. Documented here; asserted only as a Phase 7 placeholder.
- *   API current      : 'weighted' mode returns RAW earned weight
+ * V6 — weighted-score-scale  [CONVERGED — Phase 7]
+ *   `calculateScore` is private, but the score *scale* IS observable on the
+ *   boolean path by choosing a `minScore` that straddles the raw vs normalized
+ *   values: one of two weight-1.0 rules matches => raw 1.0, normalized 50.
+ *   With minScore 50, raw (1.0 >= 50 => FALSE) and normalized (50 >= 50 => TRUE)
+ *   disagree, so the boolean reveals the scale.
+ *   API NOW          : 'weighted' mode normalized 0-100 (converged) => TRUE
+ *     (Previously raw earned weight => FALSE.)
  *   scraper current  : normalized 0-100
- *   chosen-correct   : normalized 0-100  -> it.todo (cannot assert a private method)
+ *   chosen-correct   : normalized 0-100 => TRUE. ACHIEVED.
  * -----------------------------------------------------------------------------
  */
 import { Test, TestingModule } from '@nestjs/testing';
@@ -234,6 +237,22 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
       expect(result).toBe(true);
     });
 
-    it.todo('V6 weighted-score-scale: normalized 0-100 after migration');
+    it('V6 weighted-score-scale: normalized 0-100 observable via straddling minScore -> TRUE', () => {
+      // One of two weight-1.0 rules matches: raw earned weight = 1.0, normalized = 50.
+      // minScore 50 straddles the two scales: raw would be FALSE (1.0 < 50),
+      // normalized is TRUE (50 >= 50). Passing proves the API now normalizes.
+      const expression: RuleBasedFilterExpression = {
+        scoreMode: 'weighted',
+        minScore: 50,
+        rules: [
+          { field: 'temperature', operator: '>=', value: 100, weight: 1.0 }, // 150 >= 100 TRUE
+          { field: 'temperature', operator: '>=', value: 99999, weight: 1.0 }, // FALSE
+        ],
+      };
+
+      const result = service.evaluateFilterExpression(expression, article);
+
+      expect(result).toBe(true);
+    });
   });
 });

@@ -609,16 +609,17 @@ export class FilterMatcherService {
 
     switch (scoreMode) {
       case 'weighted':
-        // Return raw earned weight
-        return earnedWeight;
       case 'percentage':
-        // Return percentage (0-100)
+        // Normalized 0-100 (Phase 7 V6: converged with the scraper engine, where
+        // `weighted` and `percentage` are identical; the API previously returned
+        // raw earned weight, so a `weighted` filter back-matched on a different
+        // scale than it live-matched).
         return totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
       case 'points':
-        // Return points (same as weighted for now)
+        // Raw earned weight (the one un-normalized mode, matching the scraper).
         return earnedWeight;
       default:
-        return earnedWeight;
+        return totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
     }
   }
 }
