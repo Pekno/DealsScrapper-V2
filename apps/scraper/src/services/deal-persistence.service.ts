@@ -1,12 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import type { Article } from '@dealscrapper/database';
 import type { ISiteAdapter } from '../adapters/base/site-adapter.interface.js';
 import { extractErrorMessage } from '@dealscrapper/shared';
+import { createServiceLogger } from '@dealscrapper/shared-logging';
 import { ArticleRepository } from '../repositories/article.repository.js';
 import { FilterEvaluationService } from './filter-evaluation.service.js';
 import { FilterRepository } from '../repositories/filter.repository.js';
 import { CategoryRepository } from '../repositories/category.repository.js';
-import { DealElasticSearchService } from '../elasticsearch/services/deal-elasticsearch.service.js';
+import { scraperLogConfig } from '../config/logging.config.js';
 import type { RawDeal } from '@dealscrapper/shared-types';
 
 /**
@@ -49,14 +50,13 @@ export interface PersistenceResult {
  */
 @Injectable()
 export class DealPersistenceService {
-  private readonly logger = new Logger(DealPersistenceService.name);
+  private readonly logger = createServiceLogger(scraperLogConfig);
 
   constructor(
     private readonly articleRepository: ArticleRepository,
     private readonly filterRepository: FilterRepository,
     private readonly categoryRepository: CategoryRepository, // Added for category-specific filtering
     private readonly filterEvaluationService: FilterEvaluationService,
-    private readonly dealElasticSearchService: DealElasticSearchService,
   ) {}
 
   /**
@@ -235,47 +235,6 @@ export class DealPersistenceService {
       const errorMessage = extractErrorMessage(error);
       this.logger.error(`Failed to persist pre-filtered deals:`, errorMessage);
       throw error;
-    }
-  }
-
-  /**
-   * Check if a deal already exists in the database or ElasticSearch
-   *
-   * @param externalId - External ID to check
-   * @param siteId - Site the externalId belongs to (externalId is only unique per site)
-   * @returns True if deal exists, false otherwise
-   */
-  async dealExists(externalId: string, siteId: string): Promise<boolean> {
-    // Check PostgreSQL first (faster for recent deals)
-    const existsInPostgres =
-      await this.articleRepository.existsByExternalId(externalId, siteId);
-    if (existsInPostgres) {
-      this.logger.debug(`💾 Deal ${externalId} found in PostgreSQL`);
-      return true;
-    }
-
-    // If not in PostgreSQL, check ElasticSearch (contains historical deals)
-    try {
-      const existingIds =
-        await this.dealElasticSearchService.checkExistingDeals([externalId]);
-      const existsInElastic = existingIds.has(externalId);
-      if (existsInElastic) {
-        this.logger.debug(
-          `🔍 Deal ${externalId} found in ElasticSearch (not in PostgreSQL)`
-        );
-      } else {
-        this.logger.debug(
-          `🆕 Deal ${externalId} is new (not in PostgreSQL or ElasticSearch)`
-        );
-      }
-      return existsInElastic;
-    } catch (error) {
-      this.logger.warn(
-        `Failed to check ElasticSearch for deal ${externalId}:`,
-        error
-      );
-      // Fall back to PostgreSQL result only if ElasticSearch fails
-      return existsInPostgres;
     }
   }
 

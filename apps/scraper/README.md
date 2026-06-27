@@ -254,22 +254,6 @@ The RuleEngineService is the core evaluation engine that processes `RuleBasedFil
 
 ---
 
-### DealElasticSearchService (`elasticsearch/services/deal-elasticsearch.service.ts`)
-
-The DealElasticSearchService manages a dual-index Elasticsearch architecture: an immutable deals index for deduplication and a time-series evolution index for tracking deal state changes. On module init, it creates index templates and ensures both indices exist with proper mappings and aliases. The `processBatchedDeals()` method separates new deals from existing ones, indexes new deals in bulk, and tracks evolution (temperature, comment count, vote count, active/expired status) for existing deals only when significant changes are detected. It provides `getTemperatureEvolution()` for UI tooltips with trend analysis (rising/falling/stable) and 24-hour change calculation.
-
-**Key behaviors:**
-- `checkExistingDeals()` uses terms aggregation for fast batch existence checks
-- `hasSignificantChanges()` compares temperature, commentCount, voteCount, isExpired, isActive
-- Expired deals are skipped during evolution tracking
-- Health status reports per-index health (green/yellow/red) and document counts
-- All ES operations use configurable timeouts and bulk request limits
-- Graceful degradation -- initialization failures don't prevent service startup
-
-**Depends on:** `ElasticsearchService` (from `@nestjs/elasticsearch`)
-
----
-
 ### ElasticsearchIndexerService (`elasticsearch/services/elasticsearch-indexer.service.ts`)
 
 The ElasticsearchIndexerService handles article indexing to a flattened `articles` Elasticsearch index. It flattens `ArticleWrapper` objects into documents with site-prefixed fields (`dealabs_temperature`, `vinted_favoriteCount`, `leboncoin_city`, etc.) for unified querying across all sites. It supports single article indexing, bulk indexing, deletion, and full-text search with site-specific filtering. The `buildFilterExpressionQuery()` method converts `RuleBasedFilterExpression` trees to Elasticsearch query DSL, mapping all 27+ operators and handling recursive rule groups with AND/OR/NOT logic.
@@ -316,16 +300,15 @@ The NotificationService queues deal match notifications to the external notifier
 
 ### DealPersistenceService (`services/deal-persistence.service.ts`)
 
-The DealPersistenceService consolidates all deal persistence operations and implements an architecture where deals are always stored in Elasticsearch (complete history), then evaluated against category-specific filters, with matches and articles only created in PostgreSQL when a deal qualifies. The `processDealForAllFilters()` method groups deals by category, retrieves category-specific filters, processes each deal against filters, creates matches, creates articles only for deals with matches, and queues notifications. It also detects expired deals by comparing currently extracted external IDs against active articles in the database, marking missing articles as expired.
+The DealPersistenceService consolidates all deal persistence operations: it evaluates deals against category-specific filters and only creates articles in PostgreSQL when a deal qualifies. The `persistMultipleDeals()` method groups deals by category, retrieves category-specific filters, filters out non-matching and duplicate deals, and persists the remainder. It also detects expired deals by comparing currently extracted external IDs against active articles in the database, marking missing articles as expired.
 
 **Key behaviors:**
 - `persistMultipleDeals()` supports configurable options: upsert mode, duplicate checking, filter application
 - `markHiddenExpiredDeals()` marks articles as expired when they disappear from scraped pages
 - Duplicate detection uses batch `checkExistenceByExternalIds()` via PostgreSQL
 - Filter evaluation uses `FilterEvaluationService.findMatchingDeals()` grouped by category
-- `dealExists()` checks PostgreSQL first (faster for recent deals), then falls back to Elasticsearch
 
-**Depends on:** `ArticleRepository`, `FilterRepository`, `CategoryRepository`, `FilterEvaluationService`, `MatchRepository`, `DealElasticSearchService`, `NotificationService`
+**Depends on:** `ArticleRepository`, `FilterRepository`, `CategoryRepository`, `FilterEvaluationService`
 
 ---
 

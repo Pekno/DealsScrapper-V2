@@ -4,7 +4,6 @@ import { ArticleRepository } from '../../../src/repositories/article.repository'
 import { FilterRepository } from '../../../src/repositories/filter.repository';
 import { CategoryRepository } from '../../../src/repositories/category.repository';
 import { FilterEvaluationService } from '../../../src/services/filter-evaluation.service';
-import { DealElasticSearchService } from '../../../src/elasticsearch/services/deal-elasticsearch.service';
 import type { ISiteAdapter } from '../../../src/adapters/base/site-adapter.interface';
 
 describe('DealPersistenceService - Hidden Expired Deals Detection', () => {
@@ -13,7 +12,6 @@ describe('DealPersistenceService - Hidden Expired Deals Detection', () => {
   let mockFilterRepository: jest.Mocked<FilterRepository>;
   let mockCategoryRepository: jest.Mocked<CategoryRepository>;
   let mockFilterEvaluationService: jest.Mocked<FilterEvaluationService>;
-  let mockDealElasticSearchService: jest.Mocked<DealElasticSearchService>;
   let mockAdapter: jest.Mocked<ISiteAdapter>;
 
   beforeEach(async () => {
@@ -46,11 +44,6 @@ describe('DealPersistenceService - Hidden Expired Deals Detection', () => {
       findMatchingDeals: jest.fn(),
     } as any;
 
-    mockDealElasticSearchService = {
-      processBatchedDeals: jest.fn(),
-      checkExistingDeals: jest.fn(),
-    } as any;
-
     mockAdapter = {
       expiryResolver: undefined,
     } as any;
@@ -73,10 +66,6 @@ describe('DealPersistenceService - Hidden Expired Deals Detection', () => {
         {
           provide: FilterEvaluationService,
           useValue: mockFilterEvaluationService,
-        },
-        {
-          provide: DealElasticSearchService,
-          useValue: mockDealElasticSearchService,
         },
       ],
     }).compile();
