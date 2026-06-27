@@ -191,14 +191,7 @@ export class ValidateSiteSpecificFieldsConstraint
     const value = rule.value;
 
     // Skip validation for operators that don't use numeric values
-    const nonNumericOperators = [
-      'IS_TRUE',
-      'IS_FALSE',
-      'IS_NULL',
-      'IS_NOT_NULL',
-      'EXISTS',
-      'NOT_EXISTS',
-    ];
+    const nonNumericOperators = ['IS_TRUE', 'IS_FALSE'];
     if (nonNumericOperators.includes(rule.operator)) {
       return errors;
     }

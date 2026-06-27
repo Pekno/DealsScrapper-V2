@@ -35,24 +35,6 @@ export interface LegacyFilterExpression {
  */
 export type FilterExpression = LegacyFilterExpression;
 
-export interface CategorySelection {
-  category: string;
-  subcategories: string[];
-  sourceUrls: string[];
-}
-
-export interface FilterConfiguration {
-  id: string;
-  name: string;
-  userId: string;
-  monitoredCategories: CategorySelection[];
-  filterExpression: FilterExpression;
-  notifications: {
-    immediate: boolean;
-    digest: 'hourly' | 'daily' | 'weekly' | 'disabled';
-  };
-}
-
 // === MODERN RULE-BASED FILTER SYSTEM ===
 // These types provide comprehensive filtering capabilities
 
