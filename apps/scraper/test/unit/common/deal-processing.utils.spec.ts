@@ -40,3 +40,34 @@ describe('DealProcessingUtils.computePriceDrop', () => {
     expect(DealProcessingUtils.computePriceDrop(0, -5)).toBeNull();
   });
 });
+
+describe('DealProcessingUtils.crossedBelowThreshold', () => {
+  it('fires only on the transition from at-or-above to strictly below', () => {
+    // 100 (>= 80) -> 70 (< 80): the edge
+    expect(DealProcessingUtils.crossedBelowThreshold(100, 70, 80)).toBe(true);
+  });
+
+  it('treats a price sitting exactly on the threshold as not-yet-crossed', () => {
+    // previous == threshold counts as "above"; current == threshold is not "below"
+    expect(DealProcessingUtils.crossedBelowThreshold(80, 80, 80)).toBe(false);
+    expect(DealProcessingUtils.crossedBelowThreshold(100, 80, 80)).toBe(false);
+  });
+
+  it('does not re-fire while the price stays below (oscillation under threshold)', () => {
+    // 70 -> 60, both already below 80: no fresh crossing
+    expect(DealProcessingUtils.crossedBelowThreshold(70, 60, 80)).toBe(false);
+  });
+
+  it('does not fire when the price stays at or above the threshold', () => {
+    expect(DealProcessingUtils.crossedBelowThreshold(100, 90, 80)).toBe(false);
+  });
+
+  it('does not fire on a first sighting (no previous) even if already cheap', () => {
+    expect(DealProcessingUtils.crossedBelowThreshold(null, 50, 80)).toBe(false);
+  });
+
+  it('returns false when current price or threshold is missing', () => {
+    expect(DealProcessingUtils.crossedBelowThreshold(100, null, 80)).toBe(false);
+    expect(DealProcessingUtils.crossedBelowThreshold(100, 70, undefined)).toBe(false);
+  });
+});

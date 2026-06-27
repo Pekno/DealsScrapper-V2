@@ -51,6 +51,29 @@ export class DealProcessingUtils {
   }
 
   /**
+   * Edge-triggered price-threshold crossing — PriceGhost's `target_price` done
+   * right, and the anti-spam half of the Phase 6 alert throttle. Returns true
+   * ONLY on the transition from at-or-above `threshold` to strictly below it, so
+   * a price that stays below (or oscillates while below) does not re-fire. The
+   * cooldown is the time-based complement; this is the value-based edge.
+   *
+   * Conservative on missing input: a first observation (no `previous`) never
+   * fires, so an already-cheap newly-discovered item can't spam an alert.
+   * @param previous - Last recorded price (null on first sighting)
+   * @param current - Newly scraped price
+   * @param threshold - Target price the user wants to be alerted below
+   * @returns true only when the price just crossed below the threshold
+   */
+  static crossedBelowThreshold(
+    previous: number | null | undefined,
+    current: number | null | undefined,
+    threshold: number | null | undefined,
+  ): boolean {
+    if (previous == null || current == null || threshold == null) return false;
+    return previous >= threshold && current < threshold;
+  }
+
+  /**
    * Validates if a raw deal has all required fields
    * @param deal - Raw deal to validate
    * @returns True if deal is valid, false otherwise
