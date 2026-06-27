@@ -18,6 +18,7 @@ import { createServiceLogger } from '@dealscrapper/shared-logging';
 import { ArticleWrapper, SiteSource } from '@dealscrapper/shared-types/article';
 import type { Article, Prisma } from '@dealscrapper/database';
 import { scraperLogConfig } from '../config/logging.config.js';
+import { DealProcessingUtils } from '../common/deal-processing.utils.js';
 import { ElasticsearchIndexerService } from '../elasticsearch/services/elasticsearch-indexer.service.js';
 import type {
   UniversalListing,
@@ -336,6 +337,16 @@ export class MultiSiteArticleService {
     if (newPrice == null) return; // no price, nothing to record
     if (newPrice === previousPrice) return; // change-gated: skip unchanged
     await tx.priceObservation.create({ data: { articleId, price: newPrice } });
+
+    // Phase 6 foundation: detect drops so they become visible now and reusable
+    // by the alert wiring later. ponytail: log-only until a consumer needs it.
+    const drop = DealProcessingUtils.computePriceDrop(previousPrice, newPrice);
+    if (drop) {
+      this.logger.log(
+        `Price drop on article ${articleId}: ${drop.previousPrice} -> ${drop.currentPrice} ` +
+          `(-${drop.amount}, -${drop.percentage}%)`,
+      );
+    }
   }
 
   /**

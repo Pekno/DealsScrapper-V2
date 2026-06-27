@@ -4,6 +4,17 @@ import type { Article } from '@dealscrapper/database';
 import type { ArticleDealabs, ArticleVinted, ArticleLeBonCoin } from '@prisma/client';
 
 /**
+ * A detected price drop between two observations of the same article.
+ * `amount` and `percentage` are always positive (a drop, not a rise).
+ */
+export interface PriceDrop {
+  readonly previousPrice: number;
+  readonly currentPrice: number;
+  readonly amount: number; // previousPrice - currentPrice
+  readonly percentage: number; // (amount / previousPrice) * 100, 2 decimals
+}
+
+/**
  * Utility functions for deal processing shared across multiple services
  * Contains common operations for deal conversion, validation, and utility functions
  */
@@ -16,6 +27,27 @@ export class DealProcessingUtils {
    */
   static delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Detects a price drop between the last known price and a freshly-scraped one.
+   * Returns null when there is no usable drop: missing prices, a rise/no-change,
+   * or a non-positive previous price (no meaningful percentage). Foundation for
+   * price-drop alerts (Phase 6) and reused by whatever surfaces the drop.
+   * @param previous - Last recorded price (e.g. existing Article.currentPrice)
+   * @param current - Newly scraped price
+   * @returns The drop with amount + rounded percentage, or null if not a drop
+   */
+  static computePriceDrop(
+    previous: number | null | undefined,
+    current: number | null | undefined,
+  ): PriceDrop | null {
+    if (previous == null || current == null) return null;
+    if (previous <= 0) return null; // can't derive a percentage from <= 0
+    if (current >= previous) return null; // not a drop
+    const amount = previous - current;
+    const percentage = Math.round((amount / previous) * 10000) / 100;
+    return { previousPrice: previous, currentPrice: current, amount, percentage };
   }
 
   /**
