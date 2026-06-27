@@ -4,7 +4,7 @@ import { UnifiedNotificationPayload } from '@dealscrapper/shared-types';
 import { Redis } from 'ioredis';
 import { PrismaService, Notification, Prisma } from '@dealscrapper/database';
 import { withErrorHandling } from '../utils/error-handling.utils.js';
-import { setRedisJson, getRedisJson, safeJsonParse, scanKeys } from '../utils/redis-helpers.utils.js';
+import { setRedisJson, getRedisJson } from '../utils/redis-helpers.utils.js';
 import { notifierLogConfig } from '../config/logging.config.js';
 import {
   serializeNotificationPayload,
@@ -308,59 +308,6 @@ export class DeliveryTrackingService {
       {
         throwOnError: false,
         fallbackValue: { total: 0, delivered: 0, failed: 0, pending: 0, deliveryRate: 0 }
-      }
-    );
-  }
-
-  /**
-   * Get failed deliveries that need retry
-   */
-  async getFailedDeliveriesForRetry(): Promise<NotificationDelivery[]> {
-    return withErrorHandling(
-      this.logger,
-      'getting failed deliveries for retry',
-      async () => {
-        const pattern = 'delivery:*';
-        // Use SCAN instead of KEYS to prevent blocking Redis in production
-        const keys = await scanKeys(this.redis, pattern);
-        const failedDeliveries: NotificationDelivery[] = [];
-
-        if (keys.length === 0) return failedDeliveries;
-
-        const deliveries = await this.redis.mget(keys);
-        const now = new Date();
-
-        for (const deliveryData of deliveries) {
-          if (!deliveryData) continue;
-
-          try {
-            const delivery = JSON.parse(deliveryData) as NotificationDelivery;
-
-            // Check if delivery needs retry
-            if (
-              delivery.finalStatus === 'pending' &&
-              delivery.attempts.length > 0
-            ) {
-              const lastAttempt = delivery.attempts[delivery.attempts.length - 1];
-
-              if (
-                lastAttempt.status === 'failed' &&
-                lastAttempt.nextRetryAt &&
-                new Date(lastAttempt.nextRetryAt) <= now
-              ) {
-                failedDeliveries.push(delivery);
-              }
-            }
-          } catch (parseError) {
-            this.logger.error('Error parsing delivery data:', parseError);
-          }
-        }
-
-        return failedDeliveries;
-      },
-      {
-        throwOnError: false,
-        fallbackValue: []
       }
     );
   }

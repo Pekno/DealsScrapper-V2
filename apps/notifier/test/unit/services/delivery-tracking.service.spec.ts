@@ -243,13 +243,4 @@ describe('DeliveryTrackingService', () => {
     });
   });
 
-  describe('getFailedDeliveriesForRetry()', () => {
-    it('should return empty array when no retries needed', async () => {
-      redisClient.zrangebyscore.mockResolvedValue([]);
-
-      const result = await service.getFailedDeliveriesForRetry();
-
-      expect(result).toEqual([]);
-    });
-  });
 });

@@ -6,7 +6,6 @@ import { UserStatusService } from '../../../src/services/user-status.service.js'
 import { NotificationPreferencesService } from '../../../src/services/notification-preferences.service.js';
 import { DeliveryTrackingService } from '../../../src/services/delivery-tracking.service.js';
 import { EmailService } from '../../../src/channels/email.service.js';
-import { TemplateService } from '../../../src/templates/template.service.js';
 import { ChannelHealthService } from '../../../src/services/channel-health.service.js';
 import { PrismaService } from '@dealscrapper/database';
 
@@ -51,11 +50,6 @@ describe('NotificationProcessor', () => {
       getProviderStatus: jest.fn().mockReturnValue({ configured: true, healthy: true }),
     };
 
-    const mockTemplateService = {
-      render: jest.fn().mockReturnValue('<html>Email</html>'),
-      getTemplate: jest.fn().mockReturnValue({ subject: 'Test', body: 'Test body' }),
-    };
-
     const mockChannelHealth = {
       isChannelAvailable: jest.fn().mockResolvedValue(true),
       getRecommendedChannels: jest.fn().mockResolvedValue(['email', 'websocket']),
@@ -91,7 +85,6 @@ describe('NotificationProcessor', () => {
         { provide: NotificationPreferencesService, useValue: mockPreferencesService },
         { provide: DeliveryTrackingService, useValue: mockDeliveryTracking },
         { provide: EmailService, useValue: mockEmailService },
-        { provide: TemplateService, useValue: mockTemplateService },
         { provide: ChannelHealthService, useValue: mockChannelHealth },
         { provide: PrismaService, useValue: mockPrisma },
       ],
@@ -262,34 +255,6 @@ describe('NotificationProcessor', () => {
 
       jest.restoreAllMocks();
     }, 15000);
-  });
-
-  describe('handleSystemNotification()', () => {
-    const mockSystemJob = {
-      id: 'job-456',
-      data: {
-        userId: 'user-123',
-        subject: 'System Alert',
-        message: 'Important system message',
-        priority: 'high',
-        type: 'info',
-      },
-      attemptsMade: 0,
-      opts: {},
-    };
-
-    it('should process system notification and create delivery', async () => {
-      await processor.handleSystemNotification(mockSystemJob as any);
-
-      // System notifications skip preference check and create delivery directly
-      expect(deliveryTracking.createDelivery).toHaveBeenCalled();
-    });
-
-    it('should send via websocket when user is online', async () => {
-      await processor.handleSystemNotification(mockSystemJob as any);
-
-      expect(websocketGateway.sendToUser).toHaveBeenCalled();
-    });
   });
 
   describe('Error Handling', () => {
