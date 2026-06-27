@@ -146,21 +146,6 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
   });
 
   describe('current API behavior (characterization — asserts what the engine does TODAY)', () => {
-    it('V1 NOT-semantics: NAND -> one child true + one child false matches (TRUE)', () => {
-      // API NOT logic is `!results.every(r)`, i.e. NAND, so a mix of true/false matches.
-      const expression: RuleBasedFilterExpression = {
-        matchLogic: 'NOT',
-        rules: [
-          { field: 'temperature', operator: '>=', value: 100 }, // true (150 >= 100)
-          { field: 'temperature', operator: '>=', value: 99999 }, // false
-        ],
-      };
-
-      const result = service.evaluateFilterExpression(expression, article);
-
-      expect(result).toBe(true);
-    });
-
     it('V2 empty-filter: empty rules array matches nothing (FALSE)', () => {
       const expression: RuleBasedFilterExpression = { rules: [] };
 
@@ -198,7 +183,7 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
   });
 
   describe('Phase 7 target (chosen-correct semantics) — skipped until migration', () => {
-    it.skip('V1 NOT-semantics: NOR -> one child true means no match (FALSE)', () => {
+    it('V1 NOT-semantics: NOR -> one child true means no match (FALSE)', () => {
       // After migration, NOT should mean "none of the children match" (NOR).
       const expression: RuleBasedFilterExpression = {
         matchLogic: 'NOT',

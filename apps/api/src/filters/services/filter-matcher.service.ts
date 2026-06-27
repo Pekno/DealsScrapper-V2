@@ -145,8 +145,8 @@ export class FilterMatcherService {
     } else if (matchLogic === 'OR') {
       return results.some((r) => r);
     } else {
-      // NOT logic (negate all results)
-      return !results.every((r) => r);
+      // NOT logic = NOR: matches only when NONE of the child rules match
+      return results.every((r) => !r);
     }
   }
 
@@ -236,8 +236,8 @@ export class FilterMatcherService {
       case 'OR':
         return results.some((r) => r);
       case 'NOT':
-        // NOT negates all results
-        return !results.every((r) => r);
+        // NOT = NOR: matches only when NONE of the child rules match
+        return results.every((r) => !r);
       default:
         this.logger.warn(`Unknown logic operator: ${logic}`);
         return false;
