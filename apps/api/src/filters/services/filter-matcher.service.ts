@@ -348,10 +348,16 @@ export class FilterMatcherService {
     compareValue: string | number | boolean | string[] | number[] | Date | Date[],
     caseSensitive: boolean,
   ): boolean {
-    // Handle null field values
+    // Handle null field values. Converged with the scraper's live engine
+    // (RuleEngineService.evaluateNullFieldValue): an absent field "is not" any
+    // concrete value, so !=/NOT_EQUALS match, as does IS_FALSE (null is falsy).
+    // This keeps the API back-match in agreement with the live scrape path.
     if (fieldValue === null || fieldValue === undefined) {
-      // Only IS_FALSE can match null (treat as false)
-      return operator === 'IS_FALSE';
+      return (
+        operator === '!=' ||
+        operator === 'NOT_EQUALS' ||
+        operator === 'IS_FALSE'
+      );
     }
 
     switch (operator) {

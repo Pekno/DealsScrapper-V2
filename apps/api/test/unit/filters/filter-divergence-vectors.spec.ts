@@ -33,11 +33,12 @@
  *   scraper current  : matches-everything -> TRUE
  *   chosen-correct   : FALSE   (already equals API current)
  *
- * V3 — null-field-not-equals
+ * V3 — null-field-not-equals  [CONVERGED — Phase 7]
  *   expression: merchant '!=' 'Amazon' on an article whose merchant is null
- *   API current      : null only matches IS_FALSE -> '!=' returns FALSE
- *   scraper current  : TRUE for '!=' / IS_FALSE on null
- *   chosen-correct   : NOT LOCKED ("explicit null rules" semantics undecided) -> it.todo
+ *   API NOW          : null matches !=/NOT_EQUALS/IS_FALSE -> '!=' returns TRUE
+ *     (Previously null only matched IS_FALSE -> '!=' returned FALSE.)
+ *   scraper current  : TRUE for !=/NOT_EQUALS/IS_FALSE on null
+ *   chosen-correct   : align to the live scraper engine -> TRUE. ACHIEVED.
  *
  * V4 — between-numeric
  *   expression: currentPrice BETWEEN [500, 1500], price = 1000
@@ -157,17 +158,6 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
       expect(result).toBe(false);
     });
 
-    it('V3 null-field-not-equals: null merchant with "!=" returns FALSE', () => {
-      // evaluateOperator short-circuits null fields: only IS_FALSE matches, so '!=' is FALSE.
-      const expression: RuleBasedFilterExpression = {
-        rules: [{ field: 'merchant', operator: '!=', value: 'Amazon' }],
-      };
-
-      const result = service.evaluateFilterExpression(expression, article);
-
-      expect(result).toBe(false);
-    });
-
     it('V5 between-date: date BETWEEN in range -> TRUE', () => {
       const expression: RuleBasedFilterExpression = {
         rules: [
@@ -209,7 +199,18 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
       expect(result).toBe(false);
     });
 
-    it.todo('V3 null-field-not-equals: explicit null-rule semantics not yet locked');
+    it('V3 null-field-not-equals: null merchant with "!=" -> TRUE (converged with scraper)', () => {
+      // CONVERGED: an absent field "is not" any concrete value, so '!=' / NOT_EQUALS
+      // match on null (and IS_FALSE, since null is falsy) — matching the live scraper
+      // engine. Previously the API returned FALSE here; now it agrees with the scrape path.
+      const expression: RuleBasedFilterExpression = {
+        rules: [{ field: 'merchant', operator: '!=', value: 'Amazon' }],
+      };
+
+      const result = service.evaluateFilterExpression(expression, article);
+
+      expect(result).toBe(true);
+    });
 
     it('V4 between-numeric: numeric BETWEEN supported -> TRUE (1000 in [500, 1500])', () => {
       const expression: RuleBasedFilterExpression = {

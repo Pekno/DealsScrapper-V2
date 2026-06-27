@@ -29,13 +29,14 @@
  *      API     TODAY: matches-nothing => false.
  *      Chosen-correct target: matches-nothing => matches:false. ACHIEVED.
  *
- *  V3 — null-field-not-equals
+ *  V3 — null-field-not-equals  [CONVERGED — Phase 7]
  *      Expression: deal.merchant absent; merchant '!=' 'Amazon'.
  *      Scraper TODAY: evaluateNullFieldValue() treats !=/NOT_EQUALS/IS_FALSE on a
  *        null field as TRUE => rule matches => matches:TRUE.
- *      API     TODAY: IS_FALSE-only null handling => false.
- *      Chosen-correct target: NOT LOCKED by the plan ("explicit null rules"
- *        without a decided value) => documented as it.todo.
+ *      API     NOW: aligned to the scraper — !=/NOT_EQUALS/IS_FALSE match null
+ *        (was IS_FALSE-only => false).
+ *      Chosen-correct target: align to the live scraper engine => matches:TRUE.
+ *        ACHIEVED both sides (scraper was already correct; API converged).
  *
  *  V4 — between-numeric
  *      Expression: currentPrice BETWEEN [500, 1500]; price 1000.
@@ -186,8 +187,16 @@ describe('filter-engine divergence vectors (scraper)', () => {
       expect(result.score).toBe(0);
     });
 
-    // V3 target is NOT LOCKED by the plan — null-field semantics are undecided.
-    it.todo('V3 null-field-not-equals target: explicit null-rule semantics (undecided)');
+    it('V3 null-field-not-equals target: absent merchant != "Amazon" => matches:true (CONVERGED both engines)', async () => {
+      const expression: RuleBasedFilterExpression = {
+        rules: [{ field: 'merchant', operator: '!=', value: 'Amazon' }],
+      };
+
+      const result = await service.evaluateFilterExpression(expression, baseDeal);
+
+      // Locked semantics: an absent field "is not" any concrete value, so != matches.
+      expect(result.matches).toBe(true);
+    });
 
     it.skip('V4 between-numeric target: currentPrice 1000 BETWEEN [500,1500] => matches:true', async () => {
       const expression: RuleBasedFilterExpression = {
