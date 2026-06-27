@@ -1,17 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DealPersistenceService } from '../../../src/services/deal-persistence.service';
 import { ArticleRepository } from '../../../src/repositories/article.repository';
-import { FilterRepository } from '../../../src/repositories/filter.repository';
 import { CategoryRepository } from '../../../src/repositories/category.repository';
-import { FilterEvaluationService } from '../../../src/services/filter-evaluation.service';
 import type { ISiteAdapter } from '../../../src/adapters/base/site-adapter.interface';
 
 describe('DealPersistenceService - Hidden Expired Deals Detection', () => {
   let service: DealPersistenceService;
   let mockArticleRepository: jest.Mocked<ArticleRepository>;
-  let mockFilterRepository: jest.Mocked<FilterRepository>;
   let mockCategoryRepository: jest.Mocked<CategoryRepository>;
-  let mockFilterEvaluationService: jest.Mocked<FilterEvaluationService>;
   let mockAdapter: jest.Mocked<ISiteAdapter>;
 
   beforeEach(async () => {
@@ -19,29 +15,10 @@ describe('DealPersistenceService - Hidden Expired Deals Detection', () => {
     mockArticleRepository = {
       findMany: jest.fn(),
       updateMany: jest.fn(),
-      existsByExternalId: jest.fn(),
-      findByExternalId: jest.fn(),
-      createFromRawDeal: jest.fn(),
-      upsertFromRawDeal: jest.fn(),
-      createManyFromRawDeals: jest.fn(),
-      upsertManyFromRawDeals: jest.fn(),
-      checkExistenceByExternalIds: jest.fn(),
-      findRecent: jest.fn(),
-    } as any;
-
-    mockFilterRepository = {
-      findActiveByCategorySlug: jest.fn(),
-      findActiveByCategoryId: jest.fn(),
     } as any;
 
     mockCategoryRepository = {
-      findCategoryIdByName: jest.fn(),
       findCategoryIdBySlug: jest.fn(),
-    } as any;
-
-    mockFilterEvaluationService = {
-      evaluateFilter: jest.fn(),
-      findMatchingDeals: jest.fn(),
     } as any;
 
     mockAdapter = {
@@ -56,16 +33,8 @@ describe('DealPersistenceService - Hidden Expired Deals Detection', () => {
           useValue: mockArticleRepository,
         },
         {
-          provide: FilterRepository,
-          useValue: mockFilterRepository,
-        },
-        {
           provide: CategoryRepository,
           useValue: mockCategoryRepository,
-        },
-        {
-          provide: FilterEvaluationService,
-          useValue: mockFilterEvaluationService,
         },
       ],
     }).compile();

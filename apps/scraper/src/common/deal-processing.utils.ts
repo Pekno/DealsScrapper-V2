@@ -19,11 +19,6 @@ export class DealProcessingUtils {
   }
 
   /**
-   * @deprecated This function is no longer used and has been removed.
-   * Use ArticleRepository.convertRawDealToArticleInput() instead for proper categoryId resolution.
-   */
-
-  /**
    * Validates if a raw deal has all required fields
    * @param deal - Raw deal to validate
    * @returns True if deal is valid, false otherwise
