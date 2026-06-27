@@ -180,17 +180,6 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
       expect(result).toBe(false);
     });
 
-    it('V4 between-numeric: numeric BETWEEN is unsupported (Date-only) -> FALSE', () => {
-      // BETWEEN requires `fieldValue instanceof Date`; a numeric price returns FALSE.
-      const expression: RuleBasedFilterExpression = {
-        rules: [{ field: 'currentPrice', operator: 'BETWEEN', value: [500, 1500] }],
-      };
-
-      const result = service.evaluateFilterExpression(expression, article);
-
-      expect(result).toBe(false);
-    });
-
     it('V5 between-date: date BETWEEN in range -> TRUE', () => {
       const expression: RuleBasedFilterExpression = {
         rules: [
@@ -234,7 +223,7 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
 
     it.todo('V3 null-field-not-equals: explicit null-rule semantics not yet locked');
 
-    it.skip('V4 between-numeric: numeric BETWEEN supported -> TRUE (1000 in [500, 1500])', () => {
+    it('V4 between-numeric: numeric BETWEEN supported -> TRUE (1000 in [500, 1500])', () => {
       const expression: RuleBasedFilterExpression = {
         rules: [{ field: 'currentPrice', operator: 'BETWEEN', value: [500, 1500] }],
       };

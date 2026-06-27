@@ -533,15 +533,22 @@ export class FilterMatcherService {
         return fieldValue > compareValue;
       }
       case 'BETWEEN': {
-        if (
-          !(fieldValue instanceof Date) ||
-          !Array.isArray(compareValue) ||
-          compareValue.length !== 2
-        ) {
+        if (!Array.isArray(compareValue) || compareValue.length !== 2) {
           return false;
         }
-        const [start, end] = compareValue as Date[];
-        return fieldValue >= start && fieldValue <= end;
+        // Numeric range: coerce field + bounds via Number() to mirror the scraper engine
+        if (typeof fieldValue === 'number') {
+          const numericValue = Number(fieldValue);
+          const numericMin = Number(compareValue[0]);
+          const numericMax = Number(compareValue[1]);
+          return numericValue >= numericMin && numericValue <= numericMax;
+        }
+        // Date range: keep existing Date-only behavior
+        if (fieldValue instanceof Date) {
+          const [start, end] = compareValue as Date[];
+          return fieldValue >= start && fieldValue <= end;
+        }
+        return false;
       }
       case 'OLDER_THAN': {
         // compareValue is number of hours
