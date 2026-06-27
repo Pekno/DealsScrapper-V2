@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Process, Processor } from '@nestjs/bull';
 import type { Job } from 'bull';
 import { SiteSource, getSiteQueueName } from '@dealscrapper/shared-types';
 import { extractErrorMessage } from '@dealscrapper/shared';
+import { createServiceLogger } from '@dealscrapper/shared-logging';
 
 import { AdapterRegistry } from '../adapters/adapter.registry.js';
 import type { UniversalListing } from '../adapters/base/site-adapter.interface.js';
@@ -14,6 +15,7 @@ import { FilterMatchingService } from '../filter-matching/filter-matching.servic
 import { CategoryDiscoveryAdapterRegistry } from '../category-discovery/category-discovery-adapter.registry.js';
 import { CategoryRepository } from '../repositories/category.repository.js';
 import { ScrapingJobRepository } from '../repositories/scraping-job.repository.js';
+import { scraperLogConfig } from '../config/logging.config.js';
 
 /**
  * Job data for multi-site scraping.
@@ -58,6 +60,16 @@ function resolveSiteId(data: MultiSiteScrapeJobData, fallback: SiteSource): Site
 }
 
 /**
+ * Human-readable site labels used in log messages. Kept byte-identical to the
+ * previously hardcoded nouns so existing log assertions remain valid.
+ */
+const SITE_LOG_LABEL: Record<SiteSource, string> = {
+  [SiteSource.DEALABS]: 'Dealabs',
+  [SiteSource.VINTED]: 'Vinted',
+  [SiteSource.LEBONCOIN]: 'LeBonCoin',
+};
+
+/**
  * Processing result for multi-site scraping
  */
 export interface ProcessResult {
@@ -94,44 +106,45 @@ export interface DiscoveryResult {
 }
 
 /**
- * Multi-site scrape processor.
+ * Shared base for all site scrape processors.
  *
- * Processes jobs from site-specific Bull queues.
- * Queue names are dynamically derived from SiteSource enum via getSiteQueueName().
+ * Processes jobs from site-specific Bull queues. Holds the identical scrape and
+ * discovery pipelines once, parameterized by the abstract {@link site}.
  *
  * Each processor:
  * 1. Gets the appropriate adapter from AdapterRegistry using siteId
  * 2. Uses Puppeteer to fetch HTML
  * 3. Calls UnifiedExtractionService to extract listings
  * 4. Uses MultiSiteArticleService to save articles with extensions + ES indexing
+ *
+ * NestJS requires one concrete consumer class per queue, and `@nestjs/bull`
+ * only scans the direct prototype of the registered provider for `@Process`
+ * handlers (not the full prototype chain). The thin subclasses below therefore
+ * re-declare the decorated handlers and delegate to the base implementations.
  */
+abstract class BaseScrapeProcessor {
+  protected abstract readonly site: SiteSource;
 
-/**
- * Dealabs job processor
- */
-@Injectable()
-@Processor(getSiteQueueName(SiteSource.DEALABS))
-export class DealabsScrapeProcessor {
-  private readonly logger = new Logger(DealabsScrapeProcessor.name);
+  protected readonly logger = createServiceLogger(scraperLogConfig);
 
   constructor(
-    private readonly adapterRegistry: AdapterRegistry,
-    private readonly unifiedExtractionService: UnifiedExtractionService,
-    private readonly multiSiteArticleService: MultiSiteArticleService,
-    private readonly dealPersistenceService: DealPersistenceService,
-    private readonly puppeteerPool: PuppeteerPoolService,
-    private readonly filterMatchingService: FilterMatchingService,
-    private readonly categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
-    private readonly categoryRepository: CategoryRepository,
-    private readonly scrapingJobRepository: ScrapingJobRepository,
+    protected readonly adapterRegistry: AdapterRegistry,
+    protected readonly unifiedExtractionService: UnifiedExtractionService,
+    protected readonly multiSiteArticleService: MultiSiteArticleService,
+    protected readonly dealPersistenceService: DealPersistenceService,
+    protected readonly puppeteerPool: PuppeteerPoolService,
+    protected readonly filterMatchingService: FilterMatchingService,
+    protected readonly categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
+    protected readonly categoryRepository: CategoryRepository,
+    protected readonly scrapingJobRepository: ScrapingJobRepository,
   ) {}
 
-  @Process('scrape')
   async handleScrapeJob(job: Job<MultiSiteScrapeJobData>): Promise<ProcessResult> {
     const startTime = Date.now();
     const { categoryId, categorySlug, maxPages = 5 } = job.data;
-    const siteId = resolveSiteId(job.data, SiteSource.DEALABS);
-    const adapter = this.adapterRegistry.getAdapter(SiteSource.DEALABS);
+    const label = SITE_LOG_LABEL[this.site];
+    const siteId = resolveSiteId(job.data, this.site);
+    const adapter = this.adapterRegistry.getAdapter(this.site);
     const categoryUrl = applyOptimizedQuery(
       adapter.buildCategoryUrl(categorySlug, 1),
       job.data.optimizedQuery,
@@ -142,7 +155,7 @@ export class DealabsScrapeProcessor {
       : null;
 
     this.logger.log(
-      `🔄 Processing Dealabs scrape job [${job.id}] for category: ${categorySlug} (${categoryId}) (site: ${siteId})`,
+      `🔄 Processing ${label} scrape job [${job.id}] for category: ${categorySlug} (${categoryId}) (site: ${siteId})`,
     );
 
     let scrapingTimeMs: number | undefined;
@@ -197,7 +210,7 @@ export class DealabsScrapeProcessor {
       }
 
       this.logger.log(
-        `✅ Completed Dealabs scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
+        `✅ Completed ${label} scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
         `   📊 Extracted: ${result.listings.length}, Saved: ${saveResult.created.length}, ` +
         `Skipped: ${saveResult.skipped}, Indexed: ${saveResult.indexed}\n` +
         `   ⏱️  Duration: ${duration}ms (scraping: ${scrapingTimeMs}ms, LLM: ${result.llmTimeMs}ms)`,
@@ -223,7 +236,7 @@ export class DealabsScrapeProcessor {
       }
 
       this.logger.error(
-        `❌ Failed Dealabs scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
+        `❌ Failed ${label} scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
         `   🔗 URL: ${categoryUrl}\n` +
         `   💥 Error: ${errorMessage}\n` +
         `   ⏱️  Duration: ${duration}ms\n` +
@@ -243,13 +256,13 @@ export class DealabsScrapeProcessor {
     }
   }
 
-  @Process('discovery')
   async handleDiscoveryJob(job: Job<DiscoveryJobData>): Promise<DiscoveryResult> {
     const startTime = Date.now();
-    const siteId = SiteSource.DEALABS;
+    const label = SITE_LOG_LABEL[this.site];
+    const siteId = this.site;
 
     this.logger.log(
-      `🔍 Processing Dealabs discovery job [${job.id}] (triggered by: ${job.data.triggeredBy || 'unknown'})`,
+      `🔍 Processing ${label} discovery job [${job.id}] (triggered by: ${job.data.triggeredBy || 'unknown'})`,
     );
 
     try {
@@ -269,7 +282,7 @@ export class DealabsScrapeProcessor {
       const duration = Date.now() - startTime;
 
       this.logger.log(
-        `✅ Completed Dealabs discovery job [${job.id}]:\n` +
+        `✅ Completed ${label} discovery job [${job.id}]:\n` +
         `   📊 Categories discovered: ${categories.length}\n` +
         `   ⏱️  Duration: ${duration}ms`,
       );
@@ -286,7 +299,7 @@ export class DealabsScrapeProcessor {
       const errorMessage = extractErrorMessage(error);
 
       this.logger.error(
-        `❌ Failed Dealabs discovery job [${job.id}]:\n` +
+        `❌ Failed ${label} discovery job [${job.id}]:\n` +
         `   💥 Error: ${errorMessage}\n` +
         `   ⏱️  Duration: ${duration}ms`,
       );
@@ -300,6 +313,25 @@ export class DealabsScrapeProcessor {
         error: errorMessage,
       };
     }
+  }
+}
+
+/**
+ * Dealabs job processor
+ */
+@Injectable()
+@Processor(getSiteQueueName(SiteSource.DEALABS))
+export class DealabsScrapeProcessor extends BaseScrapeProcessor {
+  protected readonly site = SiteSource.DEALABS;
+
+  @Process('scrape')
+  async handleScrapeJob(job: Job<MultiSiteScrapeJobData>): Promise<ProcessResult> {
+    return super.handleScrapeJob(job);
+  }
+
+  @Process('discovery')
+  async handleDiscoveryJob(job: Job<DiscoveryJobData>): Promise<DiscoveryResult> {
+    return super.handleDiscoveryJob(job);
   }
 }
 
@@ -308,195 +340,17 @@ export class DealabsScrapeProcessor {
  */
 @Injectable()
 @Processor(getSiteQueueName(SiteSource.VINTED))
-export class VintedScrapeProcessor {
-  private readonly logger = new Logger(VintedScrapeProcessor.name);
-
-  constructor(
-    private readonly adapterRegistry: AdapterRegistry,
-    private readonly unifiedExtractionService: UnifiedExtractionService,
-    private readonly multiSiteArticleService: MultiSiteArticleService,
-    private readonly dealPersistenceService: DealPersistenceService,
-    private readonly puppeteerPool: PuppeteerPoolService,
-    private readonly filterMatchingService: FilterMatchingService,
-    private readonly categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
-    private readonly categoryRepository: CategoryRepository,
-    private readonly scrapingJobRepository: ScrapingJobRepository,
-  ) {}
+export class VintedScrapeProcessor extends BaseScrapeProcessor {
+  protected readonly site = SiteSource.VINTED;
 
   @Process('scrape')
   async handleScrapeJob(job: Job<MultiSiteScrapeJobData>): Promise<ProcessResult> {
-    const startTime = Date.now();
-    const { categoryId, categorySlug, maxPages = 5 } = job.data;
-    const siteId = resolveSiteId(job.data, SiteSource.VINTED);
-    const adapter = this.adapterRegistry.getAdapter(SiteSource.VINTED);
-    const categoryUrl = applyOptimizedQuery(
-      adapter.buildCategoryUrl(categorySlug, 1),
-      job.data.optimizedQuery,
-    );
-
-    const scrapingJob = job.data.scheduledJobId
-      ? await this.scrapingJobRepository.createProcessingJob(job.data.scheduledJobId)
-      : null;
-
-    this.logger.log(
-      `🔄 Processing Vinted scrape job [${job.id}] for category: ${categorySlug} (${categoryId}) (site: ${siteId})`,
-    );
-
-    let scrapingTimeMs: number | undefined;
-
-    try {
-      // Fetch HTML using Puppeteer — timed separately
-      const fetchStart = Date.now();
-      const html = await this.puppeteerPool.fetchPage(categoryUrl);
-      scrapingTimeMs = Date.now() - fetchStart;
-
-      // Extract listings using adapter
-      const result = await this.unifiedExtractionService.scrapeCategoryFromHtml(
-        adapter,
-        categorySlug,
-        html,
-        { maxPages },
-      );
-
-      // Save articles to database with extensions and ES indexing
-      const saveResult = await this.multiSiteArticleService.createManyFromListings(
-        result.listings as UniversalListing[],
-        categoryId,
-      );
-
-      // Mark articles no longer present on the page as expired
-      const extractedIds = new Set(result.listings.map((l) => l.externalId));
-      await this.dealPersistenceService.markHiddenExpiredDeals(categorySlug, extractedIds, adapter);
-
-      // Run filter matching on ALL articles (both new and existing), deduped by id
-      const allArticles = [
-        ...new Map(
-          [...saveResult.created, ...saveResult.existing].map((a) => [a.id, a]),
-        ).values(),
-      ];
-      if (allArticles.length > 0) {
-        this.logger.log(
-          `🔍 Running filter matching on ${allArticles.length} articles (${saveResult.created.length} new, ${saveResult.existing.length} existing)`,
-        );
-        await this.filterMatchingService.processFreshDeals(allArticles);
-      }
-
-      const duration = Date.now() - startTime;
-
-      if (scrapingJob) {
-        await this.scrapingJobRepository.markCompleted(scrapingJob.id, {
-          dealsFound: saveResult.created.length,
-          dealsProcessed: saveResult.indexed ?? saveResult.created.length,
-          executionTimeMs: duration,
-          scrapingTimeMs,
-          ollamaExtractionTimeMs: result.llmTimeMs,
-        });
-      }
-
-      this.logger.log(
-        `✅ Completed Vinted scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
-        `   📊 Extracted: ${result.listings.length}, Saved: ${saveResult.created.length}, ` +
-        `Skipped: ${saveResult.skipped}, Indexed: ${saveResult.indexed}\n` +
-        `   ⏱️  Duration: ${duration}ms (scraping: ${scrapingTimeMs}ms, LLM: ${result.llmTimeMs}ms)`,
-      );
-
-      return {
-        success: true,
-        siteId,
-        categoryId,
-        articleCount: saveResult.created.length,
-        pageCount: result.pageCount,
-        duration,
-        timestamp: new Date().toISOString(),
-        indexed: saveResult.indexed,
-      };
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      const errorMessage = extractErrorMessage(error);
-      const errorStack = (error as Error).stack || 'No stack trace';
-
-      if (scrapingJob) {
-        await this.scrapingJobRepository.markFailed(scrapingJob.id, errorMessage, duration, scrapingTimeMs);
-      }
-
-      this.logger.error(
-        `❌ Failed Vinted scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
-        `   🔗 URL: ${categoryUrl}\n` +
-        `   💥 Error: ${errorMessage}\n` +
-        `   ⏱️  Duration: ${duration}ms\n` +
-        `   🔍 Stack: ${errorStack.split('\n').slice(0, 5).join('\n   ')}`,
-      );
-
-      return {
-        success: false,
-        siteId,
-        categoryId,
-        articleCount: 0,
-        pageCount: 0,
-        duration,
-        timestamp: new Date().toISOString(),
-        error: errorMessage,
-      };
-    }
+    return super.handleScrapeJob(job);
   }
 
   @Process('discovery')
   async handleDiscoveryJob(job: Job<DiscoveryJobData>): Promise<DiscoveryResult> {
-    const startTime = Date.now();
-    const siteId = SiteSource.VINTED;
-
-    this.logger.log(
-      `🔍 Processing Vinted discovery job [${job.id}] (triggered by: ${job.data.triggeredBy || 'unknown'})`,
-    );
-
-    try {
-      const adapter = this.categoryDiscoveryRegistry.getAdapter(siteId);
-      if (!adapter) {
-        throw new Error(`No discovery adapter found for site: ${siteId}`);
-      }
-
-      const categories = await adapter.discoverCategories();
-
-      this.logger.log(
-        `📂 Found ${categories.length} categories for ${siteId}, saving to database...`,
-      );
-
-      await this.categoryRepository.upsertCategories(siteId, categories);
-
-      const duration = Date.now() - startTime;
-
-      this.logger.log(
-        `✅ Completed Vinted discovery job [${job.id}]:\n` +
-        `   📊 Categories discovered: ${categories.length}\n` +
-        `   ⏱️  Duration: ${duration}ms`,
-      );
-
-      return {
-        success: true,
-        siteId,
-        categoryCount: categories.length,
-        duration,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      const errorMessage = extractErrorMessage(error);
-
-      this.logger.error(
-        `❌ Failed Vinted discovery job [${job.id}]:\n` +
-        `   💥 Error: ${errorMessage}\n` +
-        `   ⏱️  Duration: ${duration}ms`,
-      );
-
-      return {
-        success: false,
-        siteId,
-        categoryCount: 0,
-        duration,
-        timestamp: new Date().toISOString(),
-        error: errorMessage,
-      };
-    }
+    return super.handleDiscoveryJob(job);
   }
 }
 
@@ -505,194 +359,16 @@ export class VintedScrapeProcessor {
  */
 @Injectable()
 @Processor(getSiteQueueName(SiteSource.LEBONCOIN))
-export class LeBonCoinScrapeProcessor {
-  private readonly logger = new Logger(LeBonCoinScrapeProcessor.name);
-
-  constructor(
-    private readonly adapterRegistry: AdapterRegistry,
-    private readonly unifiedExtractionService: UnifiedExtractionService,
-    private readonly multiSiteArticleService: MultiSiteArticleService,
-    private readonly dealPersistenceService: DealPersistenceService,
-    private readonly puppeteerPool: PuppeteerPoolService,
-    private readonly filterMatchingService: FilterMatchingService,
-    private readonly categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
-    private readonly categoryRepository: CategoryRepository,
-    private readonly scrapingJobRepository: ScrapingJobRepository,
-  ) {}
+export class LeBonCoinScrapeProcessor extends BaseScrapeProcessor {
+  protected readonly site = SiteSource.LEBONCOIN;
 
   @Process('scrape')
   async handleScrapeJob(job: Job<MultiSiteScrapeJobData>): Promise<ProcessResult> {
-    const startTime = Date.now();
-    const { categoryId, categorySlug, maxPages = 5 } = job.data;
-    const siteId = resolveSiteId(job.data, SiteSource.LEBONCOIN);
-    const adapter = this.adapterRegistry.getAdapter(SiteSource.LEBONCOIN);
-    const categoryUrl = applyOptimizedQuery(
-      adapter.buildCategoryUrl(categorySlug, 1),
-      job.data.optimizedQuery,
-    );
-
-    const scrapingJob = job.data.scheduledJobId
-      ? await this.scrapingJobRepository.createProcessingJob(job.data.scheduledJobId)
-      : null;
-
-    this.logger.log(
-      `🔄 Processing LeBonCoin scrape job [${job.id}] for category: ${categorySlug} (${categoryId}) (site: ${siteId})`,
-    );
-
-    let scrapingTimeMs: number | undefined;
-
-    try {
-      // Fetch HTML using Puppeteer — timed separately
-      const fetchStart = Date.now();
-      const html = await this.puppeteerPool.fetchPage(categoryUrl);
-      scrapingTimeMs = Date.now() - fetchStart;
-
-      // Extract listings using adapter
-      const result = await this.unifiedExtractionService.scrapeCategoryFromHtml(
-        adapter,
-        categorySlug,
-        html,
-        { maxPages },
-      );
-
-      // Save articles to database with extensions and ES indexing
-      const saveResult = await this.multiSiteArticleService.createManyFromListings(
-        result.listings as UniversalListing[],
-        categoryId,
-      );
-
-      // Mark articles no longer present on the page as expired
-      const extractedIds = new Set(result.listings.map((l) => l.externalId));
-      await this.dealPersistenceService.markHiddenExpiredDeals(categorySlug, extractedIds, adapter);
-
-      // Run filter matching on ALL articles (both new and existing), deduped by id
-      const allArticles = [
-        ...new Map(
-          [...saveResult.created, ...saveResult.existing].map((a) => [a.id, a]),
-        ).values(),
-      ];
-      if (allArticles.length > 0) {
-        this.logger.log(
-          `🔍 Running filter matching on ${allArticles.length} articles (${saveResult.created.length} new, ${saveResult.existing.length} existing)`,
-        );
-        await this.filterMatchingService.processFreshDeals(allArticles);
-      }
-
-      const duration = Date.now() - startTime;
-
-      if (scrapingJob) {
-        await this.scrapingJobRepository.markCompleted(scrapingJob.id, {
-          dealsFound: saveResult.created.length,
-          dealsProcessed: saveResult.indexed ?? saveResult.created.length,
-          executionTimeMs: duration,
-          scrapingTimeMs,
-          ollamaExtractionTimeMs: result.llmTimeMs,
-        });
-      }
-
-      this.logger.log(
-        `✅ Completed LeBonCoin scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
-        `   📊 Extracted: ${result.listings.length}, Saved: ${saveResult.created.length}, ` +
-        `Skipped: ${saveResult.skipped}, Indexed: ${saveResult.indexed}\n` +
-        `   ⏱️  Duration: ${duration}ms (scraping: ${scrapingTimeMs}ms, LLM: ${result.llmTimeMs}ms)`,
-      );
-
-      return {
-        success: true,
-        siteId,
-        categoryId,
-        articleCount: saveResult.created.length,
-        pageCount: result.pageCount,
-        duration,
-        timestamp: new Date().toISOString(),
-        indexed: saveResult.indexed,
-      };
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      const errorMessage = extractErrorMessage(error);
-      const errorStack = (error as Error).stack || 'No stack trace';
-
-      if (scrapingJob) {
-        await this.scrapingJobRepository.markFailed(scrapingJob.id, errorMessage, duration, scrapingTimeMs);
-      }
-
-      this.logger.error(
-        `❌ Failed LeBonCoin scrape job [${job.id}] for ${categorySlug} (${categoryId}):\n` +
-        `   🔗 URL: ${categoryUrl}\n` +
-        `   💥 Error: ${errorMessage}\n` +
-        `   ⏱️  Duration: ${duration}ms\n` +
-        `   🔍 Stack: ${errorStack.split('\n').slice(0, 5).join('\n   ')}`,
-      );
-
-      return {
-        success: false,
-        siteId,
-        categoryId,
-        articleCount: 0,
-        pageCount: 0,
-        duration,
-        timestamp: new Date().toISOString(),
-        error: errorMessage,
-      };
-    }
+    return super.handleScrapeJob(job);
   }
 
   @Process('discovery')
   async handleDiscoveryJob(job: Job<DiscoveryJobData>): Promise<DiscoveryResult> {
-    const startTime = Date.now();
-    const siteId = SiteSource.LEBONCOIN;
-
-    this.logger.log(
-      `🔍 Processing LeBonCoin discovery job [${job.id}] (triggered by: ${job.data.triggeredBy || 'unknown'})`,
-    );
-
-    try {
-      const adapter = this.categoryDiscoveryRegistry.getAdapter(siteId);
-      if (!adapter) {
-        throw new Error(`No discovery adapter found for site: ${siteId}`);
-      }
-
-      const categories = await adapter.discoverCategories();
-
-      this.logger.log(
-        `📂 Found ${categories.length} categories for ${siteId}, saving to database...`,
-      );
-
-      await this.categoryRepository.upsertCategories(siteId, categories);
-
-      const duration = Date.now() - startTime;
-
-      this.logger.log(
-        `✅ Completed LeBonCoin discovery job [${job.id}]:\n` +
-        `   📊 Categories discovered: ${categories.length}\n` +
-        `   ⏱️  Duration: ${duration}ms`,
-      );
-
-      return {
-        success: true,
-        siteId,
-        categoryCount: categories.length,
-        duration,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      const errorMessage = extractErrorMessage(error);
-
-      this.logger.error(
-        `❌ Failed LeBonCoin discovery job [${job.id}]:\n` +
-        `   💥 Error: ${errorMessage}\n` +
-        `   ⏱️  Duration: ${duration}ms`,
-      );
-
-      return {
-        success: false,
-        siteId,
-        categoryCount: 0,
-        duration,
-        timestamp: new Date().toISOString(),
-        error: errorMessage,
-      };
-    }
+    return super.handleDiscoveryJob(job);
   }
 }
