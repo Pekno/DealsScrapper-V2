@@ -336,3 +336,4 @@ docs/memories/old
 .vscode
 
 .claude/plan/*
+run-gnhf.ps1
