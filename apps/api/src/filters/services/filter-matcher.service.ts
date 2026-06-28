@@ -6,8 +6,8 @@ import {
   FilterRuleGroup,
   RuleBasedFilterExpression,
   FilterOperator,
-  LogicalOperator,
   FilterableField,
+  evaluateFilterOperator,
 } from '@dealscrapper/shared-types';
 import { ArticleWrapper, SiteSource } from '@dealscrapper/shared-types/article';
 import { createServiceLogger } from '@dealscrapper/shared-logging';
@@ -347,10 +347,11 @@ export class FilterMatcherService {
   /**
    * Evaluates a filter operator against field and comparison values.
    *
-   * Supports all operators: =, !=, >, >=, <, <=, CONTAINS, NOT_CONTAINS,
-   * STARTS_WITH, ENDS_WITH, REGEX, NOT_REGEX, EQUALS, NOT_EQUALS, IN, NOT_IN,
-   * INCLUDES_ANY, INCLUDES_ALL, NOT_INCLUDES_ANY, IS_TRUE, IS_FALSE, BEFORE,
-   * AFTER, BETWEEN, OLDER_THAN, NEWER_THAN.
+   * Delegates to the shared {@link evaluateFilterOperator} kernel in
+   * `@dealscrapper/shared-types` — the single canonical operator contract used by
+   * both this engine and the scraper's RuleEngineService (Phase 7 "one shared
+   * evaluator"). Field extraction, site-specific skipping, group logic, and scoring
+   * remain API-local; only the per-operator semantics are shared.
    *
    * @param operator - FilterOperator to apply
    * @param fieldValue - Actual value from the article field
@@ -371,255 +372,12 @@ export class FilterMatcherService {
       | Date[],
     caseSensitive: boolean
   ): boolean {
-    // Handle null field values. Converged with the scraper's live engine
-    // (RuleEngineService.evaluateNullFieldValue): an absent field "is not" any
-    // concrete value, so !=/NOT_EQUALS match, as does IS_FALSE (null is falsy).
-    // This keeps the API back-match in agreement with the live scrape path.
-    if (fieldValue === null || fieldValue === undefined) {
-      return (
-        operator === '!=' ||
-        operator === 'NOT_EQUALS' ||
-        operator === 'IS_FALSE'
-      );
-    }
-
-    switch (operator) {
-      // Numeric operators
-      case '=':
-        return fieldValue === compareValue;
-      case '!=':
-        return fieldValue !== compareValue;
-      case '>':
-        return typeof fieldValue === 'number' &&
-          typeof compareValue === 'number'
-          ? fieldValue > compareValue
-          : false;
-      case '>=':
-        return typeof fieldValue === 'number' &&
-          typeof compareValue === 'number'
-          ? fieldValue >= compareValue
-          : false;
-      case '<':
-        return typeof fieldValue === 'number' &&
-          typeof compareValue === 'number'
-          ? fieldValue < compareValue
-          : false;
-      case '<=':
-        return typeof fieldValue === 'number' &&
-          typeof compareValue === 'number'
-          ? fieldValue <= compareValue
-          : false;
-
-      // String operators
-      case 'CONTAINS': {
-        const strField = String(fieldValue);
-        const strCompare = String(compareValue);
-        return caseSensitive
-          ? strField.includes(strCompare)
-          : strField.toLowerCase().includes(strCompare.toLowerCase());
-      }
-      case 'NOT_CONTAINS': {
-        const strField = String(fieldValue);
-        const strCompare = String(compareValue);
-        return caseSensitive
-          ? !strField.includes(strCompare)
-          : !strField.toLowerCase().includes(strCompare.toLowerCase());
-      }
-      case 'STARTS_WITH': {
-        const strField = String(fieldValue);
-        const strCompare = String(compareValue);
-        return caseSensitive
-          ? strField.startsWith(strCompare)
-          : strField.toLowerCase().startsWith(strCompare.toLowerCase());
-      }
-      case 'ENDS_WITH': {
-        const strField = String(fieldValue);
-        const strCompare = String(compareValue);
-        return caseSensitive
-          ? strField.endsWith(strCompare)
-          : strField.toLowerCase().endsWith(strCompare.toLowerCase());
-      }
-      case 'REGEX':
-      case 'NOT_REGEX': {
-        try {
-          const flags = caseSensitive ? '' : 'i';
-          const regex = new RegExp(String(compareValue), flags);
-          const matches = regex.test(String(fieldValue));
-          return operator === 'REGEX' ? matches : !matches;
-        } catch (error) {
-          this.logger.error(
-            `Invalid regex pattern: ${compareValue}`,
-            error.stack
-          );
-          return false;
-        }
-      }
-      case 'EQUALS': {
-        const strField = String(fieldValue);
-        const strCompare = String(compareValue);
-        return caseSensitive
-          ? strField === strCompare
-          : strField.toLowerCase() === strCompare.toLowerCase();
-      }
-      case 'NOT_EQUALS': {
-        const strField = String(fieldValue);
-        const strCompare = String(compareValue);
-        return caseSensitive
-          ? strField !== strCompare
-          : strField.toLowerCase() !== strCompare.toLowerCase();
-      }
-
-      // Array operators
-      case 'IN': {
-        if (!Array.isArray(compareValue)) {
-          return false;
-        }
-        if (caseSensitive) {
-          return (compareValue as (string | number)[]).includes(
-            fieldValue as string | number
-          );
-        } else {
-          const lowerField = String(fieldValue).toLowerCase();
-          return (compareValue as (string | number)[]).some(
-            (v: string | number) => String(v).toLowerCase() === lowerField
-          );
-        }
-      }
-      case 'NOT_IN': {
-        if (!Array.isArray(compareValue)) {
-          return false;
-        }
-        if (caseSensitive) {
-          return !(compareValue as (string | number)[]).includes(
-            fieldValue as string | number
-          );
-        } else {
-          const lowerField = String(fieldValue).toLowerCase();
-          return !(compareValue as (string | number)[]).some(
-            (v: string | number) => String(v).toLowerCase() === lowerField
-          );
-        }
-      }
-      case 'INCLUDES_ANY': {
-        if (!Array.isArray(fieldValue) || !Array.isArray(compareValue)) {
-          return false;
-        }
-        if (caseSensitive) {
-          return (compareValue as (string | number)[]).some(
-            (v: string | number) =>
-              (fieldValue as (string | number)[]).includes(v)
-          );
-        } else {
-          const lowerFieldArray = (fieldValue as (string | number)[]).map(
-            (v: string | number) => String(v).toLowerCase()
-          );
-          return (compareValue as (string | number)[]).some(
-            (v: string | number) =>
-              lowerFieldArray.includes(String(v).toLowerCase())
-          );
-        }
-      }
-      case 'INCLUDES_ALL': {
-        if (!Array.isArray(fieldValue) || !Array.isArray(compareValue)) {
-          return false;
-        }
-        if (caseSensitive) {
-          return (compareValue as (string | number)[]).every(
-            (v: string | number) =>
-              (fieldValue as (string | number)[]).includes(v)
-          );
-        } else {
-          const lowerFieldArray = (fieldValue as (string | number)[]).map(
-            (v: string | number) => String(v).toLowerCase()
-          );
-          return (compareValue as (string | number)[]).every(
-            (v: string | number) =>
-              lowerFieldArray.includes(String(v).toLowerCase())
-          );
-        }
-      }
-      case 'NOT_INCLUDES_ANY': {
-        if (!Array.isArray(fieldValue) || !Array.isArray(compareValue)) {
-          return false;
-        }
-        if (caseSensitive) {
-          return !(compareValue as (string | number)[]).some(
-            (v: string | number) =>
-              (fieldValue as (string | number)[]).includes(v)
-          );
-        } else {
-          const lowerFieldArray = (fieldValue as (string | number)[]).map(
-            (v: string | number) => String(v).toLowerCase()
-          );
-          return !(compareValue as (string | number)[]).some(
-            (v: string | number) =>
-              lowerFieldArray.includes(String(v).toLowerCase())
-          );
-        }
-      }
-
-      // Boolean operators
-      case 'IS_TRUE':
-        return fieldValue === true;
-      case 'IS_FALSE':
-        return fieldValue === false || fieldValue === null;
-
-      // Date operators
-      case 'BEFORE': {
-        if (!(fieldValue instanceof Date) || !(compareValue instanceof Date)) {
-          return false;
-        }
-        return fieldValue < compareValue;
-      }
-      case 'AFTER': {
-        if (!(fieldValue instanceof Date) || !(compareValue instanceof Date)) {
-          return false;
-        }
-        return fieldValue > compareValue;
-      }
-      case 'BETWEEN': {
-        if (!Array.isArray(compareValue) || compareValue.length !== 2) {
-          return false;
-        }
-        // Numeric range: coerce field + bounds via Number() to mirror the scraper engine
-        if (typeof fieldValue === 'number') {
-          const numericValue = Number(fieldValue);
-          const numericMin = Number(compareValue[0]);
-          const numericMax = Number(compareValue[1]);
-          return numericValue >= numericMin && numericValue <= numericMax;
-        }
-        // Date range: keep existing Date-only behavior
-        if (fieldValue instanceof Date) {
-          const [start, end] = compareValue as Date[];
-          return fieldValue >= start && fieldValue <= end;
-        }
-        return false;
-      }
-      case 'OLDER_THAN': {
-        // compareValue is number of hours
-        if (!(fieldValue instanceof Date) || typeof compareValue !== 'number') {
-          return false;
-        }
-        const now = new Date();
-        const ageHours =
-          (now.getTime() - fieldValue.getTime()) / (1000 * 60 * 60);
-        return ageHours > compareValue;
-      }
-      case 'NEWER_THAN': {
-        // compareValue is number of hours
-        if (!(fieldValue instanceof Date) || typeof compareValue !== 'number') {
-          return false;
-        }
-        const now = new Date();
-        const ageHours =
-          (now.getTime() - fieldValue.getTime()) / (1000 * 60 * 60);
-        return ageHours < compareValue;
-      }
-
-      default:
-        this.logger.warn(`Unsupported operator: ${operator}`);
-        return false;
-    }
+    return evaluateFilterOperator(
+      operator,
+      fieldValue,
+      compareValue,
+      caseSensitive
+    );
   }
 
   /**

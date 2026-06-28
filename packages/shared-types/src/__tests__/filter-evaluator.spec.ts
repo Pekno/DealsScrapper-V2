@@ -3,10 +3,11 @@ import { evaluateFilterOperator } from '../filter-evaluator.js';
 /**
  * Canonical operator test-vector suite for the shared filter-evaluation kernel.
  *
- * These vectors encode the scraper RuleEngineService operator semantics VERBATIM.
- * They are the contract the scraper migrates onto as a no-op, and the contract the
- * API engine reconciles against in the next iteration. Treat any change here as a
- * behavioral change that both services must re-verify.
+ * These vectors are the single canonical operator contract shared by BOTH engines
+ * (scraper RuleEngineService + API FilterMatcherService) after the Phase 7
+ * reconciliation: `=`/`!=` are strict ===/!==, while EQUALS/NOT_EQUALS/IN/NOT_IN are
+ * case-insensitive String()-coercion comparisons honoring caseSensitive. Treat any
+ * change here as a behavioral change that both services must re-verify.
  */
 describe('evaluateFilterOperator', () => {
   describe('null / undefined field short-circuit', () => {
@@ -57,13 +58,9 @@ describe('evaluateFilterOperator', () => {
     });
   });
 
-  describe('equality operators (strict ===)', () => {
+  describe('identity operators = / != (strict ===)', () => {
     it('= matches identical numbers strictly', () => {
       expect(evaluateFilterOperator('=', 5, 5)).toBe(true);
-    });
-
-    it('EQUALS matches identical numbers strictly', () => {
-      expect(evaluateFilterOperator('EQUALS', 5, 5)).toBe(true);
     });
 
     it('= does NOT coerce string vs number (strict ===)', () => {
@@ -74,16 +71,47 @@ describe('evaluateFilterOperator', () => {
       expect(evaluateFilterOperator('=', 'abc', 'abc')).toBe(true);
     });
 
+    it('= is case-sensitive (strict, no coercion)', () => {
+      expect(evaluateFilterOperator('=', 'Amazon', 'amazon')).toBe(false);
+    });
+
     it('!= returns true for differing values', () => {
       expect(evaluateFilterOperator('!=', 5, 6)).toBe(true);
+    });
+
+    it('!= returns true for string-vs-number (strict !==)', () => {
+      expect(evaluateFilterOperator('!=', 5, '5')).toBe(true);
+    });
+  });
+
+  describe('string-equality operators EQUALS / NOT_EQUALS (case-insensitive String())', () => {
+    it('EQUALS matches identical values', () => {
+      expect(evaluateFilterOperator('EQUALS', 5, 5)).toBe(true);
+      expect(evaluateFilterOperator('EQUALS', 'abc', 'abc')).toBe(true);
+    });
+
+    it('EQUALS is case-insensitive by default', () => {
+      expect(evaluateFilterOperator('EQUALS', 'Amazon', 'amazon')).toBe(true);
+    });
+
+    it('EQUALS respects caseSensitive=true', () => {
+      expect(evaluateFilterOperator('EQUALS', 'Amazon', 'amazon', true)).toBe(
+        false
+      );
+    });
+
+    it('EQUALS coerces string vs number (String())', () => {
+      expect(evaluateFilterOperator('EQUALS', 5, '5')).toBe(true);
     });
 
     it('NOT_EQUALS returns false for identical values', () => {
       expect(evaluateFilterOperator('NOT_EQUALS', 'x', 'x')).toBe(false);
     });
 
-    it('!= returns true for string-vs-number (strict !==)', () => {
-      expect(evaluateFilterOperator('!=', 5, '5')).toBe(true);
+    it('NOT_EQUALS is case-insensitive by default (Amazon vs amazon -> false)', () => {
+      expect(evaluateFilterOperator('NOT_EQUALS', 'Amazon', 'amazon')).toBe(
+        false
+      );
     });
   });
 
@@ -192,9 +220,15 @@ describe('evaluateFilterOperator', () => {
       expect(evaluateFilterOperator('IN', 'b', 'b')).toBe(false);
     });
 
-    it('IN uses strict membership (no coercion)', () => {
-      expect(evaluateFilterOperator('IN', 5, ['5'])).toBe(false);
+    it('IN is case-insensitive String()-coercion by default', () => {
+      expect(evaluateFilterOperator('IN', 'B', ['a', 'b', 'c'])).toBe(true);
+      expect(evaluateFilterOperator('IN', 5, ['5'])).toBe(true);
       expect(evaluateFilterOperator('IN', 5, [5])).toBe(true);
+    });
+
+    it('IN respects caseSensitive=true (strict includes)', () => {
+      expect(evaluateFilterOperator('IN', 'B', ['a', 'b'], true)).toBe(false);
+      expect(evaluateFilterOperator('IN', 5, ['5'], true)).toBe(false);
     });
 
     it('NOT_IN returns true when value absent', () => {

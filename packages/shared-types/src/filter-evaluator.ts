@@ -1,9 +1,11 @@
-// ponytail: This kernel currently encodes the scraper engine's (RuleEngineService)
-// operator semantics VERBATIM so the scraper can migrate onto it as a behavior-preserving
-// no-op. The API engine's richer case-insensitive EQUALS/IN reconciliation lands when the
-// API migrates (next iteration), at which point both services re-verify against this
-// canonical contract together. Do not "fix" edge cases here unilaterally — they are the
-// agreed-upon baseline both engines reconcile against.
+// ponytail: This kernel is the single canonical operator contract shared by BOTH the
+// scraper engine (RuleEngineService) and the API engine (FilterMatcherService). It started
+// as the scraper's semantics verbatim, then absorbed the API's richer behavior during the
+// Phase 7 reconciliation: `=`/`!=` stay strict ===/!==, while EQUALS/NOT_EQUALS/IN/NOT_IN
+// are case-insensitive String()-coercion comparisons (honoring the rule's caseSensitive
+// flag). Both services re-verify against this file's test-vector suite plus their own
+// filter-matching specs. Do not "fix" edge cases here unilaterally — change it only as a
+// deliberate, both-sides-re-verified reconciliation.
 
 import { FilterOperator } from './filtering.js';
 
@@ -53,13 +55,16 @@ function evaluateOperatorByType(
   caseSensitive: boolean
 ): boolean {
   switch (operator) {
-    // Numeric operators
+    // Identity operators — strict, type-agnostic === / !== (no coercion).
     case '=':
-    case 'EQUALS':
       return fieldValue === ruleValue;
     case '!=':
-    case 'NOT_EQUALS':
       return fieldValue !== ruleValue;
+    // String-equality operators — case-insensitive String() coercion by default.
+    case 'EQUALS':
+      return evaluateStringEquality(fieldValue, ruleValue, caseSensitive);
+    case 'NOT_EQUALS':
+      return !evaluateStringEquality(fieldValue, ruleValue, caseSensitive);
     case '>':
       return Number(fieldValue) > Number(ruleValue);
     case '>=':
@@ -117,9 +122,12 @@ function evaluateOperatorByType(
 
     // Array operators
     case 'IN':
-      return Array.isArray(ruleValue) && ruleValue.includes(fieldValue);
+      return evaluateIn(fieldValue, ruleValue, caseSensitive);
     case 'NOT_IN':
-      return Array.isArray(ruleValue) && !ruleValue.includes(fieldValue);
+      return (
+        Array.isArray(ruleValue) &&
+        !evaluateIn(fieldValue, ruleValue, caseSensitive)
+      );
     case 'INCLUDES_ANY':
       return evaluateIncludesAny(fieldValue, ruleValue, caseSensitive);
     case 'INCLUDES_ALL':
@@ -165,6 +173,39 @@ function evaluateNullFieldValue(operator: FilterOperator): boolean {
   return (
     operator === '!=' || operator === 'NOT_EQUALS' || operator === 'IS_FALSE'
   );
+}
+
+/**
+ * Case-insensitive (by default) string-equality comparison via String() coercion.
+ * Backs EQUALS/NOT_EQUALS — the "smart" equality variant distinct from the strict
+ * `=`/`!=` identity operators. Honors caseSensitive.
+ */
+function evaluateStringEquality(
+  fieldValue: unknown,
+  ruleValue: unknown,
+  caseSensitive: boolean
+): boolean {
+  const field = String(fieldValue);
+  const rule = String(ruleValue);
+  return caseSensitive
+    ? field === rule
+    : field.toLowerCase() === rule.toLowerCase();
+}
+
+/**
+ * IN membership test: case-insensitive String() coercion by default, strict
+ * `Array.prototype.includes` when caseSensitive. Returns false when ruleValue
+ * is not an array. NOT_IN is the array-guarded negation of this.
+ */
+function evaluateIn(
+  fieldValue: unknown,
+  ruleValue: unknown,
+  caseSensitive: boolean
+): boolean {
+  if (!Array.isArray(ruleValue)) return false;
+  if (caseSensitive) return ruleValue.includes(fieldValue);
+  const lowerField = String(fieldValue).toLowerCase();
+  return ruleValue.some((v) => String(v).toLowerCase() === lowerField);
 }
 
 /**
