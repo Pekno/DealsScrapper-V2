@@ -158,11 +158,14 @@ export class FilterMatcherService {
   /**
    * Evaluates a single rule or rule group.
    *
+   * Intentionally public so FiltersService.calculateMatchScore can reuse the
+   * exact same rule-evaluation logic when computing per-match scores.
+   *
    * @param ruleOrGroup - FilterRule or FilterRuleGroup to evaluate
    * @param article - ArticleWrapper to evaluate against
    * @returns true if the rule/group matches
    */
-  private evaluateRuleOrGroup(
+  public evaluateRuleOrGroup(
     ruleOrGroup: FilterRule | FilterRuleGroup,
     article: ArticleWrapper
   ): boolean {

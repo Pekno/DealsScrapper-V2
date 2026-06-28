@@ -1057,8 +1057,7 @@ export class FiltersService {
         const weight = rule.weight ?? 1.0;
         totalWeight += weight;
 
-        // TODO: Expose evaluateRuleOrGroup as a public method on FilterMatcherService instead of using bracket notation to bypass access modifiers
-        const matches = this.filterMatcherService['evaluateRuleOrGroup'](
+        const matches = this.filterMatcherService.evaluateRuleOrGroup(
           rule,
           article
         );
@@ -1084,7 +1083,7 @@ export class FiltersService {
     // For boolean matching, use count of matching rules as score
     let matchingRules = 0;
     for (const rule of rules) {
-      if (this.filterMatcherService['evaluateRuleOrGroup'](rule, article)) {
+      if (this.filterMatcherService.evaluateRuleOrGroup(rule, article)) {
         matchingRules++;
       }
     }
