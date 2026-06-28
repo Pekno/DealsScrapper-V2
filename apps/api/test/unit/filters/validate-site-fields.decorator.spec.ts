@@ -226,13 +226,13 @@ describe('ValidateSiteSpecificFields Decorator', () => {
           } as FilterRule,
           {
             field: 'size',
-            operator: '==',
+            operator: 'EQUALS',
             value: 'M',
             siteSpecific: SiteSource.VINTED,
           } as FilterRule,
           {
             field: 'condition',
-            operator: '==',
+            operator: 'EQUALS',
             value: 'Neuf avec étiquette',
             siteSpecific: SiteSource.VINTED,
           } as FilterRule,
@@ -252,7 +252,7 @@ describe('ValidateSiteSpecificFields Decorator', () => {
         rules: [
           {
             field: 'city',
-            operator: '==',
+            operator: 'EQUALS',
             value: 'Paris',
             siteSpecific: SiteSource.LEBONCOIN,
           } as FilterRule,
@@ -296,7 +296,7 @@ describe('ValidateSiteSpecificFields Decorator', () => {
           } as FilterRule,
           {
             field: 'department',
-            operator: '==',
+            operator: 'EQUALS',
             value: '75',
             siteSpecific: SiteSource.LEBONCOIN,
           } as FilterRule,
@@ -601,9 +601,9 @@ describe('ValidateSiteSpecificFields Decorator', () => {
         rules: [
           {
             field: 'nonExistentField',
-            operator: '==',
+            operator: 'EQUALS',
             value: 'test',
-          } as FilterRule,
+          } as unknown as FilterRule,
         ],
       };
 
