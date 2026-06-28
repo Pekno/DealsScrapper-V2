@@ -12,7 +12,7 @@ import {
   FilterStatsDto,
 } from '../../../src/filters/dto/filter-response.dto';
 import type { AuthenticatedRequest } from '@dealscrapper/shared-types';
-import { DigestFrequency } from '@dealscrapper/shared-types/enums';
+import { DigestFrequency, UserRole } from '@dealscrapper/shared-types/enums';
 
 describe('FiltersController - Filter Management API', () => {
   let controller: FiltersController;
@@ -23,6 +23,8 @@ describe('FiltersController - Filter Management API', () => {
     user: {
       id: 'user-1',
       email: 'test@example.com',
+      emailVerified: true,
+      role: UserRole.USER,
     },
   };
 
@@ -176,8 +178,8 @@ describe('FiltersController - Filter Management API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Filter created successfully');
-      expect(result.data.id).toBe('filter-1');
-      expect(result.data.name).toBe('Gaming Deals');
+      expect(result.data!.id).toBe('filter-1');
+      expect(result.data!.name).toBe('Gaming Deals');
       expect(mockFiltersService.create).toHaveBeenCalledWith('user-1', createFilterDto);
     });
 
@@ -215,8 +217,8 @@ describe('FiltersController - Filter Management API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Filters retrieved successfully');
-      expect(result.data.filters).toHaveLength(1);
-      expect(result.data.total).toBe(1);
+      expect(result.data!.filters).toHaveLength(1);
+      expect(result.data!.total).toBe(1);
       expect(mockFiltersService.findAll).toHaveBeenCalledWith('user-1', query);
     });
 
@@ -272,7 +274,7 @@ describe('FiltersController - Filter Management API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Filter retrieved successfully');
-      expect(result.data.id).toBe('filter-1');
+      expect(result.data!.id).toBe('filter-1');
       expect(mockFiltersService.findOne).toHaveBeenCalledWith('user-1', 'filter-1');
     });
 
@@ -309,7 +311,7 @@ describe('FiltersController - Filter Management API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Filter updated successfully');
-      expect(result.data.name).toBe('Updated Gaming Deals');
+      expect(result.data!.name).toBe('Updated Gaming Deals');
       expect(mockFiltersService.update).toHaveBeenCalledWith('user-1', 'filter-1', updateFilterDto);
     });
 
@@ -376,7 +378,7 @@ describe('FiltersController - Filter Management API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Filter status toggled successfully');
-      expect(result.data.active).toBe(false);
+      expect(result.data!.active).toBe(false);
       expect(mockFiltersService.toggleActive).toHaveBeenCalledWith('user-1', 'filter-1');
     });
   });
@@ -397,8 +399,8 @@ describe('FiltersController - Filter Management API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Matches retrieved successfully');
-      expect(result.data.matches).toHaveLength(1);
-      expect(result.data.total).toBe(1);
+      expect(result.data!.matches).toHaveLength(1);
+      expect(result.data!.total).toBe(1);
       expect(mockFiltersService.getMatches).toHaveBeenCalledWith(
         'user-1',
         'filter-1',
@@ -452,9 +454,9 @@ describe('FiltersController - Filter Management API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Filter statistics retrieved successfully');
-      expect(result.data.totalMatches).toBe(25);
-      expect(result.data.matchesLast24h).toBe(5);
-      expect(result.data.avgScore).toBe(75);
+      expect(result.data!.totalMatches).toBe(25);
+      expect(result.data!.matchesLast24h).toBe(5);
+      expect(result.data!.avgScore).toBe(75);
       expect(mockFiltersService.getFilterStats).toHaveBeenCalledWith('user-1', 'filter-1');
     });
   });
@@ -496,9 +498,9 @@ describe('FiltersController - Filter Management API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Scraping status retrieved successfully');
-      expect(result.data.categories).toHaveLength(1);
-      expect(result.data.categories[0].categoryName).toBe('PC Gaming');
-      expect(result.data.nextScrapingAt).toBeDefined();
+      expect(result.data!.categories).toHaveLength(1);
+      expect(result.data!.categories[0].categoryName).toBe('PC Gaming');
+      expect(result.data!.nextScrapingAt).toBeDefined();
       expect(mockFiltersService.getScrapingStatus).toHaveBeenCalledWith('user-1', 'filter-1');
     });
   });
