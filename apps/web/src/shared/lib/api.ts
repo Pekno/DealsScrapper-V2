@@ -693,6 +693,23 @@ class ApiClient {
     >(response);
   }
 
+  // Cross-site product suggestions ("also found on") — API Service
+  async getProductSuggestions(
+    articleId: string
+  ): Promise<ApiResponse<import('@dealscrapper/shared-types').ProductSuggestion[]>> {
+    const response = await fetch(
+      `${getApiBaseUrl()}/articles/${articleId}/similar`,
+      {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      }
+    );
+
+    return this.handleResponse<
+      import('@dealscrapper/shared-types').ProductSuggestion[]
+    >(response);
+  }
+
   // Generic HTTP Methods (defaults to API service)
   async get<T>(endpoint: string, baseUrl?: string): Promise<ApiResponse<T>> {
     const response = await fetch(`${baseUrl || getApiBaseUrl()}${endpoint}`, {
