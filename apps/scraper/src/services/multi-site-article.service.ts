@@ -18,8 +18,9 @@ import { createServiceLogger } from '@dealscrapper/shared-logging';
 import { ArticleWrapper, SiteSource } from '@dealscrapper/shared-types/article';
 import type { Article, Prisma } from '@dealscrapper/database';
 import { scraperLogConfig } from '../config/logging.config.js';
-import { DealProcessingUtils } from '../common/deal-processing.utils.js';
+import { DealProcessingUtils, type PriceDrop } from '../common/deal-processing.utils.js';
 import { ElasticsearchIndexerService } from '../elasticsearch/services/elasticsearch-indexer.service.js';
+import { NotificationService } from '../notification/notification.service.js';
 import type {
   UniversalListing,
   DealabsData,
@@ -48,6 +49,7 @@ export class MultiSiteArticleService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly elasticsearchIndexer: ElasticsearchIndexerService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -278,7 +280,7 @@ export class MultiSiteArticleService {
     categoryId: string,
     previousPrice: number | null,
   ): Promise<ArticleCreationResult> {
-    const article = await this.prisma.$transaction(async (tx) => {
+    const { article, drop } = await this.prisma.$transaction(async (tx) => {
       // Update base article
       const updatedArticle = await tx.article.update({
         where: { id: articleId },
@@ -298,15 +300,27 @@ export class MultiSiteArticleService {
       await this.updateExtension(tx, articleId, listing);
 
       // Append a price observation only when the price actually changed
-      await this.recordPriceObservation(
+      const drop = await this.recordPriceObservation(
         tx,
         articleId,
         listing.currentPrice,
         previousPrice,
       );
 
-      return updatedArticle;
+      return { article: updatedArticle, drop };
     });
+
+    // Phase 6: price dropped -> fire throttled alerts to existing matches.
+    // Post-commit and best-effort: a drop alert must never break the scrape.
+    if (drop) {
+      try {
+        await this.notificationService.queuePriceDropAlerts(articleId, drop);
+      } catch (alertError) {
+        this.logger.warn(
+          `Failed to queue price-drop alerts for ${articleId}: ${String(alertError)}`,
+        );
+      }
+    }
 
     // Re-index to Elasticsearch
     let indexed = false;
@@ -333,13 +347,13 @@ export class MultiSiteArticleService {
     articleId: string,
     newPrice: number | null,
     previousPrice: number | null,
-  ): Promise<void> {
-    if (newPrice == null) return; // no price, nothing to record
-    if (newPrice === previousPrice) return; // change-gated: skip unchanged
+  ): Promise<PriceDrop | null> {
+    if (newPrice == null) return null; // no price, nothing to record
+    if (newPrice === previousPrice) return null; // change-gated: skip unchanged
     await tx.priceObservation.create({ data: { articleId, price: newPrice } });
 
-    // Phase 6 foundation: detect drops so they become visible now and reusable
-    // by the alert wiring later. ponytail: log-only until a consumer needs it.
+    // Phase 6: detect drops and return them so the caller can fire alerts
+    // post-commit (enqueuing inside the tx would leak on rollback).
     const drop = DealProcessingUtils.computePriceDrop(previousPrice, newPrice);
     if (drop) {
       this.logger.log(
@@ -347,6 +361,7 @@ export class MultiSiteArticleService {
           `(-${drop.amount}, -${drop.percentage}%)`,
       );
     }
+    return drop;
   }
 
   /**

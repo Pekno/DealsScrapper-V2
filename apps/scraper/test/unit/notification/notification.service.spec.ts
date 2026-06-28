@@ -12,6 +12,7 @@ describe('NotificationService', () => {
   const mockPrismaService = {
     match: {
       update: jest.fn(),
+      findMany: jest.fn(),
     },
   };
 
@@ -242,6 +243,79 @@ describe('NotificationService', () => {
         priority: 'high',
         timestamp: expect.any(Date),
       });
+    });
+  });
+
+  describe('Price-drop alerts (Phase 6 throttle)', () => {
+    const drop = {
+      previousPrice: 1200,
+      currentPrice: 999.99,
+      amount: 200.01,
+      percentage: 16.67,
+    };
+
+    it('queues a drop alert for a match that has never been notified', async () => {
+      mockPrismaService.match.findMany.mockResolvedValue([
+        { ...mockMatch, notifiedAt: null },
+      ]);
+      mockPrismaService.match.update.mockResolvedValue(mockMatch);
+
+      const queued = await service.queuePriceDropAlerts('article-123', drop);
+
+      expect(queued).toBe(1);
+      // value-edge dedup: jobId encodes the dropped price, so the SAME price
+      // can't re-fire but a new lower price will
+      const queueCall = externalNotificationQueue.add.mock.calls[0];
+      expect(queueCall[2].jobId).toBe('deal-match-match-123-drop-999.99');
+    });
+
+    it('skips a match still inside the cooldown window', async () => {
+      const now = new Date('2026-06-28T12:00:00Z');
+      const justNotified = new Date('2026-06-28T11:00:00Z'); // 1h ago < 6h cooldown
+      mockPrismaService.match.findMany.mockResolvedValue([
+        { ...mockMatch, notifiedAt: justNotified },
+      ]);
+
+      const queued = await service.queuePriceDropAlerts('article-123', drop, now);
+
+      expect(queued).toBe(0);
+      expect(externalNotificationQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('fires again once the cooldown has elapsed', async () => {
+      const now = new Date('2026-06-28T12:00:00Z');
+      const longAgo = new Date('2026-06-28T05:00:00Z'); // 7h ago > 6h cooldown
+      mockPrismaService.match.findMany.mockResolvedValue([
+        { ...mockMatch, notifiedAt: longAgo },
+      ]);
+      mockPrismaService.match.update.mockResolvedValue(mockMatch);
+
+      const queued = await service.queuePriceDropAlerts('article-123', drop, now);
+
+      expect(queued).toBe(1);
+      expect(externalNotificationQueue.add).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 0 when the article has no matches', async () => {
+      mockPrismaService.match.findMany.mockResolvedValue([]);
+
+      const queued = await service.queuePriceDropAlerts('article-123', drop);
+
+      expect(queued).toBe(0);
+      expect(externalNotificationQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('only queries active-article matches for the dropped article', async () => {
+      mockPrismaService.match.findMany.mockResolvedValue([]);
+
+      await service.queuePriceDropAlerts('article-123', drop);
+
+      expect(mockPrismaService.match.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { articleId: 'article-123', article: { isActive: true } },
+          include: { filter: true, article: true },
+        })
+      );
     });
   });
 });

@@ -8,6 +8,15 @@ import {
   QUEUE_PRIORITIES,
 } from '@dealscrapper/shared-types';
 import { extractErrorMessage } from '@dealscrapper/shared';
+import { DealProcessingUtils, type PriceDrop } from '../common/deal-processing.utils.js';
+
+/**
+ * Minimum gap between price-drop alerts for the same match. The time-based
+ * anti-spam half of Phase 6's throttle (PriceGhost shipped with none, so an
+ * oscillating price spammed). ponytail: a flat constant; make it per-user
+ * configurable only when someone asks.
+ */
+const PRICE_DROP_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6h
 
 /**
  * Notification data payload for external notifier service
@@ -71,7 +80,8 @@ export class NotificationService {
    * @throws Error if notification queuing fails
    */
   async queueExternalNotification(
-    match: Match & { filter: Filter; article: Article }
+    match: Match & { filter: Filter; article: Article },
+    dedupKey?: string
   ): Promise<void> {
     try {
       this.logger.log(
@@ -79,7 +89,10 @@ export class NotificationService {
       );
 
       const notificationPayload = this.createNotificationPayload(match);
-      const jobOptions = this.createJobOptions(match.id, notificationPayload.priority);
+      const jobOptions = this.createJobOptions(
+        dedupKey ?? match.id,
+        notificationPayload.priority
+      );
 
       await this.externalNotificationQueue.add(
         'deal-match-found',
@@ -97,6 +110,67 @@ export class NotificationService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Phase 6 alert wiring: turn a detected price drop on an article into
+   * throttled drop alerts for that article's existing (active) matches.
+   *
+   * Throttle = the two anti-spam primitives combined:
+   *  - time gate: skip a match still inside the cooldown window (uses the
+   *    match's own notifiedAt, no new column needed).
+   *  - value edge: the per-price dedupKey means Bull ignores a re-add for a
+   *    price already alerted, so an oscillation back up-and-down won't re-fire.
+   *
+   * Best-effort and isolated per match: one failing enqueue doesn't abort the
+   * rest. The caller (scrape write-path) wraps this so a drop alert can never
+   * break a scrape.
+   *
+   * @param articleId - The article whose price just dropped
+   * @param drop - The computed drop (carries the new currentPrice for the key)
+   * @param now - Injected for deterministic cooldown evaluation
+   * @returns Number of alerts actually queued
+   */
+  async queuePriceDropAlerts(
+    articleId: string,
+    drop: PriceDrop,
+    now: Date = new Date()
+  ): Promise<number> {
+    const matches = await this.prisma.match.findMany({
+      where: { articleId, article: { isActive: true } },
+      include: { filter: true, article: true },
+    });
+
+    let queued = 0;
+    for (const match of matches) {
+      if (
+        !DealProcessingUtils.cooldownElapsed(
+          match.notifiedAt,
+          now,
+          PRICE_DROP_COOLDOWN_MS
+        )
+      ) {
+        continue; // still inside the cooldown window
+      }
+      try {
+        await this.queueExternalNotification(
+          match,
+          `${match.id}-drop-${drop.currentPrice}`
+        );
+        queued++;
+      } catch (error) {
+        this.logger.error(
+          `Failed to queue price-drop alert for match ${match.id}: ${extractErrorMessage(error)}`
+        );
+      }
+    }
+
+    if (queued > 0) {
+      this.logger.log(
+        `Queued ${queued} price-drop alert(s) for article ${articleId} (-${drop.percentage}%)`
+      );
+    }
+    return queued;
   }
 
   /**
@@ -131,18 +205,19 @@ export class NotificationService {
 
   /**
    * Creates queue job options based on notification priority
-   * @param matchId - The unique identifier of the match, used as a deterministic
-   *   Bull jobId so a retried upstream handler cannot enqueue a duplicate
-   *   notification for the same match while the job still exists/is retained
+   * @param dedupKey - Deterministic Bull jobId key. For a plain deal match this
+   *   is the match id (so a retried handler can't duplicate the notification);
+   *   for a price-drop re-alert it also encodes the dropped price so the SAME
+   *   price won't re-fire but a new lower price will (value-edge dedup).
    * @param priority - Notification priority level
    * @returns Queue job configuration options
    */
   private createJobOptions(
-    matchId: string,
+    dedupKey: string,
     priority: NotificationPriority
   ): NotificationJobOptions {
     return {
-      jobId: `deal-match-${matchId}`,
+      jobId: `deal-match-${dedupKey}`,
       priority: QUEUE_PRIORITIES[priority],
       attempts: 3,
       backoff: {

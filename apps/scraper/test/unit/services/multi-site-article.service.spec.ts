@@ -3,6 +3,7 @@ import { PrismaService } from '@dealscrapper/database';
 import { SiteSource } from '@dealscrapper/shared-types/article';
 import { MultiSiteArticleService } from '../../../src/services/multi-site-article.service';
 import { ElasticsearchIndexerService } from '../../../src/elasticsearch/services/elasticsearch-indexer.service';
+import { NotificationService } from '../../../src/notification/notification.service';
 import type {
   UniversalListing,
   DealabsData,
@@ -44,6 +45,10 @@ describe('MultiSiteArticleService', () => {
     bulkIndex: jest.fn(),
   };
 
+  const mockNotificationService = {
+    queuePriceDropAlerts: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -55,6 +60,10 @@ describe('MultiSiteArticleService', () => {
         {
           provide: ElasticsearchIndexerService,
           useValue: mockElasticsearchIndexer,
+        },
+        {
+          provide: NotificationService,
+          useValue: mockNotificationService,
         },
       ],
     }).compile();
@@ -446,6 +455,36 @@ describe('MultiSiteArticleService', () => {
       expect(mockPrismaService.priceObservation.create).toHaveBeenNthCalledWith(2, {
         data: { articleId: 'price-article', price: 80 },
       });
+    });
+
+    it('fires a throttled price-drop alert when the price drops on update', async () => {
+      // Arrange — existing article at 100, re-scraped at 80
+      const createdArticle = { id: 'price-article', currentPrice: 100 };
+      const updatedArticle = { id: 'price-article', currentPrice: 80 };
+      mockPrismaService.article.findFirst.mockResolvedValueOnce(createdArticle);
+      mockPrismaService.article.update.mockResolvedValueOnce(updatedArticle);
+
+      // Act
+      await service.upsertFromListing(buildDealabsListing(80), 'cat-1');
+
+      // Assert — the drop is dispatched to the alert wiring with the new price
+      expect(mockNotificationService.queuePriceDropAlerts).toHaveBeenCalledTimes(1);
+      const [articleId, drop] = mockNotificationService.queuePriceDropAlerts.mock.calls[0];
+      expect(articleId).toBe('price-article');
+      expect(drop).toMatchObject({ previousPrice: 100, currentPrice: 80, amount: 20, percentage: 20 });
+    });
+
+    it('does NOT fire an alert when the price is unchanged on update', async () => {
+      // Arrange — existing article at 100, re-scraped at 100 (no drop)
+      const article = { id: 'price-article', currentPrice: 100 };
+      mockPrismaService.article.findFirst.mockResolvedValueOnce(article);
+      mockPrismaService.article.update.mockResolvedValueOnce(article);
+
+      // Act
+      await service.upsertFromListing(buildDealabsListing(100), 'cat-1');
+
+      // Assert
+      expect(mockNotificationService.queuePriceDropAlerts).not.toHaveBeenCalled();
     });
   });
 });
