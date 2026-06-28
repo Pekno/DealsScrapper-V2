@@ -27,8 +27,8 @@ const RULE_ENGINE_CONFIG = {
   },
   /** Regular expression flags */
   REGEX_FLAGS: {
-    CASE_SENSITIVE: 'g',
-    CASE_INSENSITIVE: 'gi',
+    CASE_SENSITIVE: '',
+    CASE_INSENSITIVE: 'i',
   },
   /** Time conversion constants */
   TIME_CONVERSION: {
