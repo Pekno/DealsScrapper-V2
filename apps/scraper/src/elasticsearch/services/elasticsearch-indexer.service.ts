@@ -19,13 +19,10 @@ import { Client, errors as esErrors } from '@elastic/elasticsearch';
 import type { estypes } from '@elastic/elasticsearch';
 import type { PrismaClient } from '@prisma/client';
 import {
-  type FilterExpression,
   type RuleBasedFilterExpression,
   type FilterRule,
   type FilterRuleGroup,
   type LogicalOperator,
-  type FilterOperator,
-  type FilterableField,
   SiteSource,
 } from '@dealscrapper/shared-types';
 import {
@@ -620,43 +617,6 @@ export class ElasticsearchIndexerService implements OnModuleInit {
 
     const logic = filter.matchLogic ?? 'AND';
     return this.combineWithLogic(clauses, logic);
-  }
-
-  /**
-   * Legacy FilterExpression conversion (backwards compatible)
-   */
-  private buildElasticsearchQuery(filter: FilterExpression): Record<string, unknown> {
-    // Handle legacy FilterExpression format
-    if (filter.type === 'GROUP' && filter.children) {
-      const clauses = filter.children.map((child) =>
-        this.buildElasticsearchQuery(child),
-      );
-      const logic = filter.operator ?? 'AND';
-      return this.combineWithLogic(clauses, logic as LogicalOperator);
-    }
-
-    if (filter.type === 'CONDITION' && filter.field && filter.comparison) {
-      // Convert legacy comparison to modern operator
-      const operatorMap: Record<string, FilterOperator> = {
-        '>': '>',
-        '<': '<',
-        '=': '=',
-        '>=': '>=',
-        '<=': '<=',
-        'CONTAINS': 'CONTAINS',
-        'REGEX': 'REGEX',
-      };
-      const operator = operatorMap[filter.comparison] ?? '=';
-      // Create a FilterRule from the legacy filter format
-      const legacyRule: FilterRule = {
-        field: filter.field as FilterableField,
-        operator,
-        value: filter.value ?? '',
-      };
-      return this.buildRuleQuery(legacyRule);
-    }
-
-    return { match_all: {} };
   }
 
   /**

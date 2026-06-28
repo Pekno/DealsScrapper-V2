@@ -43,6 +43,20 @@ export interface NotificationDelivery {
 }
 
 /**
+ * Result of a createDelivery call.
+ *
+ * `deduplicated` reports whether the call hit an existing notification for the
+ * same `(userId, dedupKey)` / `(userId, matchId)` event (no new row was created).
+ * Callers use this to avoid re-sending — and therefore re-delivering an email —
+ * for an event that was already delivered. The dedup DECISION itself is unchanged;
+ * this only surfaces it.
+ */
+export interface CreateDeliveryResult {
+  deliveryId: string;
+  deduplicated: boolean;
+}
+
+/**
  * NOTE: UnifiedNotificationPayload has been moved to @dealscrapper/shared-types
  *
  * This type is now shared across:
@@ -74,17 +88,37 @@ export class DeliveryTrackingService {
       NotificationDelivery,
       'id' | 'attempts' | 'finalStatus' | 'createdAt'
     >
-  ): Promise<string> {
+  ): Promise<CreateDeliveryResult> {
     return withErrorHandling(
       this.logger,
       'creating delivery record',
       async () => {
         const matchId = delivery.notificationPayload.matchId ?? null;
+        const dedupKey = delivery.notificationPayload.dedupKey ?? null;
 
         // Idempotency: a retried Bull job must not re-create the Notification
-        // (and re-send) for the same (userId, matchId). Only DEAL_MATCH payloads
-        // carry a matchId; SYSTEM/verification/password-reset/digest do not.
-        if (matchId !== null) {
+        // (and re-send) for the same logical event.
+        //
+        // When the producer supplies an event-granular dedupKey, dedup on
+        // (userId, dedupKey). This keeps the initial match and a later price-drop
+        // re-alert (which reuse the same matchId) distinct, while a re-detect of
+        // the SAME drop (same dedupKey) is deduped.
+        //
+        // When no dedupKey is present, fall back to the legacy (userId, matchId)
+        // guard. Only DEAL_MATCH payloads carry a matchId;
+        // SYSTEM/verification/password-reset/digest do not and always create.
+        if (dedupKey !== null) {
+          const existing = await this.prisma.notification.findFirst({
+            where: { userId: delivery.userId, dedupKey },
+          });
+
+          if (existing) {
+            this.logger.debug(
+              `⏭️ Skipping duplicate delivery for user ${delivery.userId} dedupKey ${dedupKey} (existing ${existing.id})`
+            );
+            return { deliveryId: existing.id, deduplicated: true };
+          }
+        } else if (matchId !== null) {
           const existing = await this.prisma.notification.findFirst({
             where: { userId: delivery.userId, matchId },
           });
@@ -93,7 +127,7 @@ export class DeliveryTrackingService {
             this.logger.debug(
               `⏭️ Skipping duplicate delivery for user ${delivery.userId} matchId ${matchId} (existing ${existing.id})`
             );
-            return existing.id;
+            return { deliveryId: existing.id, deduplicated: true };
           }
         }
 
@@ -121,6 +155,7 @@ export class DeliveryTrackingService {
             id: deliveryId,
             userId: delivery.userId,
             matchId: delivery.notificationPayload.matchId ?? null, // Store matchId from payload (DEAL_MATCH only)
+            dedupKey: delivery.notificationPayload.dedupKey ?? null, // Event-granular idempotency key (DEAL_MATCH/price-drop)
             type: delivery.notificationPayload.type,
             subject: delivery.notificationPayload.title, // Store title in subject for backward compatibility
             content: serializeNotificationPayload(delivery.notificationPayload), // Store complete unified payload
@@ -145,7 +180,7 @@ export class DeliveryTrackingService {
         this.logger.debug(
           `📝 Created delivery record ${deliveryId} for user ${delivery.userId} with unified payload`
         );
-        return deliveryId;
+        return { deliveryId, deduplicated: false };
       }
     );
   }

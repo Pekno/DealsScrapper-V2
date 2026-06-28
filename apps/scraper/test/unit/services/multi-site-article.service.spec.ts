@@ -235,41 +235,127 @@ describe('MultiSiteArticleService', () => {
   });
 
   describe('createManyFromListings', () => {
-    it('should skip duplicate articles', async () => {
-      const listings: UniversalListing[] = [
-        {
-          externalId: 'existing-deal',
-          title: 'Existing Deal',
-          description: null,
-          url: 'https://dealabs.com/deal/existing',
-          imageUrl: null,
-          siteId: SiteSource.DEALABS,
-          currentPrice: 100,
-          originalPrice: null,
-          merchant: null,
-          location: null,
-          publishedAt: new Date(),
-          isActive: true,
-          categorySlug: 'test',
-          siteSpecificData: {
-            type: 'dealabs',
-            temperature: 50,
-            commentCount: 5,
-            communityVerified: false,
-            freeShipping: false,
-            isCoupon: false,
-            discountPercentage: null,
-            expiresAt: null,
-          } as DealabsData,
-        },
-      ];
+    const buildListing = (currentPrice: number): UniversalListing => ({
+      externalId: 'existing-deal',
+      title: 'Existing Deal',
+      description: null,
+      url: 'https://dealabs.com/deal/existing',
+      imageUrl: null,
+      siteId: SiteSource.DEALABS,
+      currentPrice,
+      originalPrice: null,
+      merchant: null,
+      location: null,
+      publishedAt: new Date(),
+      isActive: true,
+      categorySlug: 'test',
+      siteSpecificData: {
+        type: 'dealabs',
+        temperature: 50,
+        commentCount: 5,
+        communityVerified: false,
+        freeShipping: false,
+        isCoupon: false,
+        discountPercentage: null,
+        expiresAt: null,
+      } as DealabsData,
+    });
 
-      mockPrismaService.article.findFirst.mockResolvedValue({ id: 'existing' });
+    beforeEach(() => {
+      mockPrismaService.$transaction.mockImplementation(async (callback) =>
+        callback(mockPrismaService),
+      );
+      mockPrismaService.articleDealabs.update.mockResolvedValue({});
+      mockPrismaService.articleDealabs.create.mockResolvedValue({});
+      mockPrismaService.priceObservation.create.mockResolvedValue({});
+      jest
+        .spyOn(
+          require('@dealscrapper/shared-types/article').ArticleWrapper,
+          'load',
+        )
+        .mockResolvedValue({
+          base: { id: 'existing' },
+          source: SiteSource.DEALABS,
+        });
+    });
 
-      const result = await service.createManyFromListings(listings, 'cat-1');
+    it('updates an existing article instead of skipping it, and keeps it for filter matching', async () => {
+      // Arrange — article already exists at 100, re-scraped at 100 (unchanged)
+      const existingArticle = { id: 'existing', currentPrice: 100 };
+      mockPrismaService.article.findFirst.mockResolvedValue(existingArticle);
+      mockPrismaService.article.update.mockResolvedValue(existingArticle);
 
-      expect(result.skipped).toBe(1);
+      // Act
+      const result = await service.createManyFromListings(
+        [buildListing(100)],
+        'cat-1',
+      );
+
+      // Assert — existing article is updated and surfaced to filter matching
+      expect(mockPrismaService.article.update).toHaveBeenCalled();
       expect(result.created).toHaveLength(0);
+      expect(result.existing).toHaveLength(1);
+      expect(result.existing[0].id).toBe('existing');
+      expect(result.skipped).toBe(0);
+    });
+
+    it('writes NO new observation and fires NO alert when an existing price is unchanged', async () => {
+      // Arrange — existing article at 100, re-scraped at 100
+      const existingArticle = { id: 'existing', currentPrice: 100 };
+      mockPrismaService.article.findFirst.mockResolvedValue(existingArticle);
+      mockPrismaService.article.update.mockResolvedValue(existingArticle);
+
+      // Act
+      await service.createManyFromListings([buildListing(100)], 'cat-1');
+
+      // Assert — change-gate holds: no observation, no drop alert
+      expect(mockPrismaService.priceObservation.create).not.toHaveBeenCalled();
+      expect(mockNotificationService.queuePriceDropAlerts).not.toHaveBeenCalled();
+    });
+
+    it('writes a new observation and fires a drop alert when an existing price drops', async () => {
+      // Arrange — existing article at 100, re-scraped at 80
+      const existingArticle = { id: 'existing', currentPrice: 100 };
+      const updatedArticle = { id: 'existing', currentPrice: 80 };
+      mockPrismaService.article.findFirst.mockResolvedValue(existingArticle);
+      mockPrismaService.article.update.mockResolvedValue(updatedArticle);
+
+      // Act
+      await service.createManyFromListings([buildListing(80)], 'cat-1');
+
+      // Assert — second observation recorded and drop dispatched with new price
+      expect(mockPrismaService.priceObservation.create).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.priceObservation.create).toHaveBeenCalledWith({
+        data: { articleId: 'existing', price: 80 },
+      });
+      expect(mockNotificationService.queuePriceDropAlerts).toHaveBeenCalledTimes(1);
+      const [articleId, drop] =
+        mockNotificationService.queuePriceDropAlerts.mock.calls[0];
+      expect(articleId).toBe('existing');
+      expect(drop).toMatchObject({
+        previousPrice: 100,
+        currentPrice: 80,
+        amount: 20,
+        percentage: 20,
+      });
+    });
+
+    it('buckets a brand-new article into created[] and does not touch existing[]', async () => {
+      // Arrange — no existing article
+      const createdArticle = { id: 'existing', currentPrice: 80 };
+      mockPrismaService.article.findFirst.mockResolvedValue(null);
+      mockPrismaService.article.create.mockResolvedValue(createdArticle);
+
+      // Act
+      const result = await service.createManyFromListings(
+        [buildListing(80)],
+        'cat-1',
+      );
+
+      // Assert
+      expect(mockPrismaService.article.create).toHaveBeenCalled();
+      expect(result.created).toHaveLength(1);
+      expect(result.existing).toHaveLength(0);
     });
   });
 

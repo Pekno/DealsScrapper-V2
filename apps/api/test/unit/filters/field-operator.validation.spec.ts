@@ -101,6 +101,25 @@ describe('Field/operator validation', () => {
       expect(errors).toEqual([]);
     });
 
+    it('accepts a substring-overlap operator on a string field (title INCLUDES_ANY [...])', () => {
+      // Regression guard: the kernel evaluates this via String(title).includes(),
+      // so the documented `title INCLUDES_ANY ['refurbished','used']` Swagger
+      // example must validate (no 400) instead of being rejected.
+      const rules: FilterRule[] = [
+        {
+          field: 'title',
+          operator: 'INCLUDES_ANY',
+          value: ['refurbished', 'used'],
+        },
+      ];
+
+      // Act
+      const errors = operatorErrorsFor(rules);
+
+      // Assert
+      expect(errors).toEqual([]);
+    });
+
     it('accepts a boolean predicate on a boolean field (freeShipping IS_TRUE)', () => {
       // Arrange: freeShipping is Dealabs-specific; annotate to isolate.
       const rules: FilterRule[] = [
@@ -155,9 +174,19 @@ describe('Field/operator validation', () => {
       expect(isOperatorAllowedForCategory('=', 'string')).toBe(true);
     });
 
-    it('restricts array-overlap operators to array fields only', () => {
+    it('allows substring-overlap operators on string and array fields', () => {
+      // The engine does String(fieldValue).includes(...), so INCLUDES_ANY is
+      // meaningful on strings (the documented `title INCLUDES_ANY [...]` usage)
+      // and on arrays (which stringify to a comma-joined list).
+      expect(isOperatorAllowedForCategory('INCLUDES_ANY', 'string')).toBe(true);
       expect(isOperatorAllowedForCategory('INCLUDES_ANY', 'array')).toBe(true);
-      expect(isOperatorAllowedForCategory('INCLUDES_ANY', 'string')).toBe(
+    });
+
+    it('still rejects substring-overlap operators on genuinely-incompatible fields', () => {
+      // Numeric/boolean fields can only ever produce nonsense substring matches,
+      // so the table keeps protecting against silent never-match.
+      expect(isOperatorAllowedForCategory('INCLUDES_ANY', 'number')).toBe(false);
+      expect(isOperatorAllowedForCategory('INCLUDES_ANY', 'boolean')).toBe(
         false
       );
     });

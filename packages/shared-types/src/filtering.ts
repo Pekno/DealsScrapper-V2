@@ -11,30 +11,6 @@ export type FilterValue =
   | string[]
   | number[];
 
-/**
- * @deprecated Use `RuleBasedFilterExpression` instead.
- * This legacy tree-based filter expression format is being phased out.
- * New code should use the modern rule-based system with `RuleBasedFilterExpression`.
- *
- * Migration guide:
- * - Replace `type: 'GROUP'` with `FilterRuleGroup.logic` (AND/OR)
- * - Replace `type: 'CONDITION'` with `FilterRule`
- * - Use `RuleBasedFilterExpression.rules` array instead of nested `children`
- */
-export interface LegacyFilterExpression {
-  type: 'GROUP' | 'CONDITION';
-  operator?: 'AND' | 'OR';
-  field?: string;
-  comparison?: '>' | '<' | '=' | '>=' | '<=' | 'CONTAINS' | 'REGEX';
-  value?: FilterValue;
-  children?: LegacyFilterExpression[];
-}
-
-/**
- * @deprecated Alias for backwards compatibility. Use `RuleBasedFilterExpression` instead.
- */
-export type FilterExpression = LegacyFilterExpression;
-
 // === MODERN RULE-BASED FILTER SYSTEM ===
 // These types provide comprehensive filtering capabilities
 
@@ -212,10 +188,8 @@ export interface RuleBasedFilterExpression {
   minScore?: number; // Minimum score threshold
 }
 
-// Filter expression input type for API
-export interface FilterExpressionInput extends RuleBasedFilterExpression {
-  // This is the interface used by the API for input validation
-}
+// Filter expression input type used by the API for input validation
+export type FilterExpressionInput = RuleBasedFilterExpression;
 
 // Common filterable fields list
 export const COMMON_FILTERABLE_FIELDS: FilterableField[] = [

@@ -432,6 +432,107 @@ describe('evaluateFilterOperator', () => {
     });
   });
 
+  // Edge-case coercion behaviors that changed silently when the API engine adopted
+  // this shared kernel's canonical semantics (Phase 7 reconciliation). Pinned here so
+  // they can't drift unnoticed. Each asserts what the code DOES today (intended = current).
+  describe('reconciled coercion edge cases (pinned)', () => {
+    describe('numeric comparison on string field values (Number() coercion)', () => {
+      it('numeric-looking STRING field coerces and compares (>= true)', () => {
+        expect(evaluateFilterOperator('>=', '150', 100)).toBe(true);
+      });
+
+      it('numeric-looking STRING field coerces and compares (<= true)', () => {
+        expect(evaluateFilterOperator('<=', '80', 100)).toBe(true);
+      });
+
+      it('numeric-looking STRING field below bound (>= false)', () => {
+        expect(evaluateFilterOperator('>=', '50', 100)).toBe(false);
+      });
+
+      it('non-numeric STRING field coerces to NaN -> all comparisons false', () => {
+        // Number('abc') === NaN; every comparison against NaN is false.
+        expect(evaluateFilterOperator('>', 'abc', 1)).toBe(false);
+        expect(evaluateFilterOperator('>=', 'abc', 1)).toBe(false);
+        expect(evaluateFilterOperator('<', 'abc', 1)).toBe(false);
+        expect(evaluateFilterOperator('<=', 'abc', 1)).toBe(false);
+      });
+    });
+
+    describe('BEFORE / AFTER with string/ISO inputs and invalid dates', () => {
+      it('BEFORE coerces ISO strings via new Date(String(...))', () => {
+        expect(
+          evaluateFilterOperator('BEFORE', '2020-06-01', '2021-06-01')
+        ).toBe(true);
+      });
+
+      it('AFTER coerces ISO strings via new Date(String(...))', () => {
+        expect(
+          evaluateFilterOperator('AFTER', '2022-06-01', '2021-06-01')
+        ).toBe(true);
+      });
+
+      it('BEFORE with an invalid date string -> false (Invalid Date comparison is NaN)', () => {
+        // new Date('not-a-real-date') is Invalid Date; < against any date yields false.
+        expect(
+          evaluateFilterOperator('BEFORE', 'not-a-real-date', '2021-06-01')
+        ).toBe(false);
+      });
+
+      it('AFTER with an invalid date string -> false (Invalid Date comparison is NaN)', () => {
+        expect(
+          evaluateFilterOperator('AFTER', 'not-a-real-date', '2021-06-01')
+        ).toBe(false);
+      });
+    });
+
+    describe('OLDER_THAN / NEWER_THAN on falsy (non-nullish) field values', () => {
+      // null/undefined short-circuit before age logic; a falsy-but-present value
+      // (empty string, 0) reaches calculateAgeHours, which returns 0 hours.
+      it('OLDER_THAN on empty-string field -> false (age 0 is not > 24h)', () => {
+        expect(evaluateFilterOperator('OLDER_THAN', '', 24)).toBe(false);
+      });
+
+      it('NEWER_THAN on empty-string field -> true (age 0 is < 24h)', () => {
+        expect(evaluateFilterOperator('NEWER_THAN', '', 24)).toBe(true);
+      });
+
+      it('OLDER_THAN on numeric-zero field -> false (age 0 is not > 24h)', () => {
+        expect(evaluateFilterOperator('OLDER_THAN', 0, 24)).toBe(false);
+      });
+
+      it('NEWER_THAN on numeric-zero field -> true (age 0 is < 24h)', () => {
+        expect(evaluateFilterOperator('NEWER_THAN', 0, 24)).toBe(true);
+      });
+    });
+
+    describe('IS_TRUE / IS_FALSE Boolean() coercion broadening', () => {
+      it('IS_TRUE on numeric zero -> false', () => {
+        expect(evaluateFilterOperator('IS_TRUE', 0, null)).toBe(false);
+      });
+
+      it('IS_TRUE on empty string -> false', () => {
+        expect(evaluateFilterOperator('IS_TRUE', '', null)).toBe(false);
+      });
+
+      it('IS_TRUE on the string "false" -> true (non-empty string is truthy)', () => {
+        // Boolean('false') === true — a non-empty string coerces truthy.
+        expect(evaluateFilterOperator('IS_TRUE', 'false', null)).toBe(true);
+      });
+
+      it('IS_FALSE on numeric zero -> true', () => {
+        expect(evaluateFilterOperator('IS_FALSE', 0, null)).toBe(true);
+      });
+
+      it('IS_FALSE on empty string -> true', () => {
+        expect(evaluateFilterOperator('IS_FALSE', '', null)).toBe(true);
+      });
+
+      it('IS_FALSE on the string "false" -> false (non-empty string is truthy)', () => {
+        expect(evaluateFilterOperator('IS_FALSE', 'false', null)).toBe(false);
+      });
+    });
+  });
+
   describe('unknown operator', () => {
     it('throws for an unrecognized operator', () => {
       expect(() =>

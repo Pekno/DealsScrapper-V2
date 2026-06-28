@@ -129,86 +129,65 @@ export class MultiSiteArticleService {
   }
 
   /**
-   * Creates multiple articles from listings with bulk Elasticsearch indexing.
+   * Creates or updates many articles from listings.
+   *
+   * Each listing is routed through `upsertFromListing`, so an EXISTING article is
+   * refreshed (price/temperature + change-gated PriceObservation + drop-detection
+   * alerts) rather than skipped. New and updated articles are bucketed separately
+   * so the caller can still run filter-matching on both sets (existing[] keeps the
+   * updated articles, no regression there). Each upsert indexes its own article to
+   * Elasticsearch internally, so there is no separate bulk-index pass.
    */
   async createManyFromListings(
     listings: UniversalListing[],
     categoryId: string,
   ): Promise<BulkCreationResult> {
     const created: Article[] = [];
-    const existing: Article[] = []; // Track existing articles for filter matching
+    const existing: Article[] = []; // Updated existing articles, still filter-matched
     const errors: string[] = [];
-    let skipped = 0;
+    let indexed = 0;
 
-    // Process each listing
     for (const listing of listings) {
       try {
-        // Check if article already exists
-        const existingArticle = await this.prisma.article.findFirst({
-          where: {
-            siteId: listing.siteId,
-            externalId: listing.externalId,
-          },
-        });
+        const alreadyExisted = await this.articleExists(listing);
 
-        if (existingArticle) {
-          skipped++;
-          existing.push(existingArticle); // Add to existing list for filter matching
-          continue;
+        const result = await this.upsertFromListing(listing, categoryId);
+
+        if (alreadyExisted) {
+          existing.push(result.article);
+        } else {
+          created.push(result.article);
         }
-
-        const result = await this.createFromListing(listing, categoryId);
-        created.push(result.article);
+        if (result.indexed) {
+          indexed++;
+        }
       } catch (error) {
-        // Handle race condition: another concurrent job may have created the same article
-        // between our findFirst check and the create call
-        if (
-          error &&
-          typeof error === 'object' &&
-          'code' in error &&
-          error.code === 'P2002'
-        ) {
-          const raceExisting = await this.prisma.article.findFirst({
-            where: {
-              siteId: listing.siteId,
-              externalId: listing.externalId,
-            },
-          });
-          if (raceExisting) {
-            skipped++;
-            existing.push(raceExisting);
-          }
-          continue;
-        }
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         errors.push(`${listing.externalId}: ${errorMessage}`);
       }
     }
 
-    // Bulk index all created articles
-    let indexed = 0;
-    if (created.length > 0) {
-      try {
-        const wrappers = await ArticleWrapper.loadMany(
-          created.map((a) => a.id),
-          this.prisma,
-        );
-        const bulkResult = await this.elasticsearchIndexer.bulkIndex(wrappers);
-        indexed = bulkResult.items.filter(
-          (item: { index?: { error?: unknown } }) => !item.index?.error
-        ).length;
-        this.logger.log(
-          `Bulk indexed ${indexed}/${created.length} articles to Elasticsearch`,
-        );
-      } catch (esError) {
-        this.logger.warn(
-          `Bulk Elasticsearch indexing failed: ${String(esError)}`,
-        );
-      }
-    }
+    this.logger.log(
+      `Upserted ${listings.length} listings: ${created.length} created, ` +
+        `${existing.length} updated, ${indexed} indexed to Elasticsearch`,
+    );
 
-    return { created, existing, indexed, skipped, errors };
+    return { created, existing, indexed, skipped: 0, errors };
+  }
+
+  /**
+   * Returns whether a base article already exists for this listing's
+   * (siteId, externalId). Used to bucket an upsert result as created vs updated.
+   */
+  private async articleExists(listing: UniversalListing): Promise<boolean> {
+    const existing = await this.prisma.article.findFirst({
+      where: {
+        siteId: listing.siteId,
+        externalId: listing.externalId,
+      },
+    });
+    return existing !== null;
   }
 
   /**

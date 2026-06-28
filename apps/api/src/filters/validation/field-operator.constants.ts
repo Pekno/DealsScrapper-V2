@@ -112,10 +112,15 @@ export const FIELD_TYPE_CATEGORIES: Readonly<
  *   stringifiable value, it is only meaningful for strings, and applying it to
  *   non-strings is exactly the silent never-match / nonsense this item targets
  *   (e.g. `temperature REGEX`, `freeShipping CONTAINS`) -> string only.
- * - `IN` / `NOT_IN`: compares a scalar field against an array literal ->
- *   string or number fields.
- * - `INCLUDES_ANY` / `INCLUDES_ALL` / `NOT_INCLUDES_ANY`: the engine returns
- *   `false` unless `fieldValue` is an array -> array only.
+ * - `IN` / `NOT_IN`: the engine coerces the field via `String(fieldValue)` and
+ *   compares against an array literal -> string or number fields.
+ * - `INCLUDES_ANY` / `INCLUDES_ALL` / `NOT_INCLUDES_ANY`: the engine does
+ *   substring matching with `String(fieldValue).includes(...)` (the array guard
+ *   is on the RULE value, not the field). This is meaningful for string fields
+ *   (the documented `title INCLUDES_ANY [...]` usage) and for array fields
+ *   (which stringify to a comma-joined list) -> string or array. Numeric/
+ *   boolean/date/json fields would only ever produce nonsense substring matches,
+ *   so they stay rejected.
  * - `IS_TRUE` / `IS_FALSE`: `=== true` / `=== false` -> boolean only.
  * - `BEFORE` / `AFTER` / `OLDER_THAN` / `NEWER_THAN`: the engine returns
  *   `false` unless `fieldValue instanceof Date` -> date only.
@@ -158,10 +163,12 @@ export const OPERATOR_ALLOWED_CATEGORIES: Readonly<
   IN: ['string', 'number'],
   NOT_IN: ['string', 'number'],
 
-  // Array overlap — engine requires the field value itself to be an array
-  INCLUDES_ANY: ['array'],
-  INCLUDES_ALL: ['array'],
-  NOT_INCLUDES_ANY: ['array'],
+  // Substring overlap — engine does String(fieldValue).includes(...), so it
+  // works on string fields (documented `title INCLUDES_ANY [...]` usage) and on
+  // array fields (which stringify to a comma-joined list)
+  INCLUDES_ANY: ['string', 'array'],
+  INCLUDES_ALL: ['string', 'array'],
+  NOT_INCLUDES_ANY: ['string', 'array'],
 
   // Boolean predicates
   IS_TRUE: ['boolean'],

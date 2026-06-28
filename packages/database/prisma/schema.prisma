@@ -298,6 +298,7 @@ model Notification {
   id         String    @id @default(cuid())
   userId     String
   matchId    String? // Optional foreign key to Match (only for DEAL_MATCH type)
+  dedupKey   String? // Event-granular idempotency key set by the producer (e.g. deal-match-<id>-drop-<price>); distinguishes notification events sharing the same matchId
   type       String // 'DEAL_MATCH', 'SYSTEM', 'ALERT' (notification types)
   subject    String?
   content    Json
@@ -316,6 +317,7 @@ model Notification {
   @@index([sent])
   @@index([userId])
   @@index([matchId])
+  @@index([userId, dedupKey])
   @@index([isRead])
   @@index([userId, isRead])
   @@index([createdAt])

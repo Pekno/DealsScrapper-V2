@@ -8,6 +8,8 @@ import {
   IsOptional,
   ValidateNested,
   IsNotEmpty,
+  Min,
+  Max,
 } from 'class-validator';
 import { Transform, plainToInstance, Type } from 'class-transformer';
 
@@ -194,12 +196,19 @@ export class RuleBasedFilterExpressionDto {
   matchLogic?: LogicalOperator = 'AND';
 
   @ApiPropertyOptional({
-    description: 'Minimum score threshold for matches',
+    description:
+      'Minimum match score threshold (0-100). The score is a normalized ' +
+      'percentage computed as (earnedWeight / totalWeight) * 100, so this ' +
+      'value must be authored on the same 0-100 scale.',
     example: 75,
     default: 50,
+    minimum: 0,
+    maximum: 100,
   })
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(100)
   minScore?: number = 50;
 }
 

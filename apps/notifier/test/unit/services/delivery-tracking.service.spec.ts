@@ -127,7 +127,8 @@ describe('DeliveryTrackingService', () => {
 
       const result = await service.createDelivery(deliveryData);
 
-      expect(result).toBeDefined();
+      expect(result.deliveryId).toBeDefined();
+      expect(result.deduplicated).toBe(false);
       expect(prismaService.notification.create).toHaveBeenCalled();
     });
 
@@ -156,12 +157,132 @@ describe('DeliveryTrackingService', () => {
       // Act
       const result = await service.createDelivery(deliveryData);
 
-      // Assert: returns existing id and does NOT re-create
-      expect(result).toBe('existing-notif-1');
+      // Assert: returns existing id, flags dedup, and does NOT re-create
+      expect(result.deliveryId).toBe('existing-notif-1');
+      expect(result.deduplicated).toBe(true);
       expect(prismaService.notification.findFirst).toHaveBeenCalledWith({
         where: { userId: 'user-123', matchId: 'match-456' },
       });
       expect(prismaService.notification.create).not.toHaveBeenCalled();
+    });
+
+    it('should deliver BOTH initial match and price-drop sharing a matchId but differing dedupKey', async () => {
+      // Arrange: same matchId, different dedupKeys (initial match vs price drop).
+      // No existing row matches either dedupKey, so both must create.
+      const basePayload = {
+        id: 'notif_payload_match',
+        siteId: SiteSource.DEALABS,
+        type: 'DEAL_MATCH' as const,
+        title: 'Great deal',
+        message: 'A deal matched your filter',
+        matchId: 'match-789',
+        data: { dealData: { title: 'Great deal', url: 'https://example.com/deal' } },
+        timestamp: '2024-01-15T10:00:00Z',
+        read: false,
+      };
+
+      const initialMatch = {
+        userId: 'user-123',
+        type: 'deal-match' as const,
+        notificationPayload: { ...basePayload, dedupKey: 'deal-match-match-789' },
+        priority: 'normal' as const,
+      };
+      const priceDrop = {
+        userId: 'user-123',
+        type: 'deal-match' as const,
+        notificationPayload: { ...basePayload, dedupKey: 'deal-match-match-789-drop-599' },
+        priority: 'normal' as const,
+      };
+
+      prismaService.notification.findFirst.mockResolvedValue(null);
+      prismaService.notification.create.mockResolvedValue(mockNotification);
+
+      // Act
+      const initialId = await service.createDelivery(initialMatch);
+      const dropId = await service.createDelivery(priceDrop);
+
+      // Assert: dedup queried on (userId, dedupKey), both delivered (created)
+      expect(prismaService.notification.findFirst).toHaveBeenNthCalledWith(1, {
+        where: { userId: 'user-123', dedupKey: 'deal-match-match-789' },
+      });
+      expect(prismaService.notification.findFirst).toHaveBeenNthCalledWith(2, {
+        where: { userId: 'user-123', dedupKey: 'deal-match-match-789-drop-599' },
+      });
+      expect(prismaService.notification.create).toHaveBeenCalledTimes(2);
+      expect(initialId.deliveryId).toBeDefined();
+      expect(initialId.deduplicated).toBe(false);
+      expect(dropId.deliveryId).toBeDefined();
+      expect(dropId.deduplicated).toBe(false);
+    });
+
+    it('should dedup a re-detected price drop sharing the same dedupKey', async () => {
+      // Arrange: the same drop is re-detected -> same dedupKey -> existing row found
+      const priceDrop = {
+        userId: 'user-123',
+        type: 'deal-match' as const,
+        notificationPayload: {
+          id: 'notif_payload_drop',
+          siteId: SiteSource.DEALABS,
+          type: 'DEAL_MATCH' as const,
+          title: 'Great deal',
+          message: 'Price dropped',
+          matchId: 'match-789',
+          dedupKey: 'deal-match-match-789-drop-599',
+          data: { dealData: { title: 'Great deal', url: 'https://example.com/deal' } },
+          timestamp: '2024-01-15T10:00:00Z',
+          read: false,
+        },
+        priority: 'normal' as const,
+      };
+
+      const existing = {
+        ...mockNotification,
+        id: 'existing-drop-1',
+        matchId: 'match-789',
+        dedupKey: 'deal-match-match-789-drop-599',
+      };
+      prismaService.notification.findFirst.mockResolvedValue(existing);
+
+      // Act
+      const result = await service.createDelivery(priceDrop);
+
+      // Assert: deduped on dedupKey, returns existing id, flags dedup, no re-create
+      expect(result.deliveryId).toBe('existing-drop-1');
+      expect(result.deduplicated).toBe(true);
+      expect(prismaService.notification.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'user-123', dedupKey: 'deal-match-match-789-drop-599' },
+      });
+      expect(prismaService.notification.create).not.toHaveBeenCalled();
+    });
+
+    it('should always create for null-dedupKey SYSTEM notifications without dedup query', async () => {
+      // Arrange: SYSTEM payload carries neither matchId nor dedupKey
+      const systemDelivery = {
+        userId: 'user-123',
+        type: 'verification' as const,
+        notificationPayload: {
+          id: 'notif_payload_system',
+          siteId: SiteSource.DEALABS,
+          type: 'SYSTEM' as const,
+          title: 'Verify your email address',
+          message: 'Please verify your account',
+          data: { email: 'user@example.com' },
+          timestamp: '2024-01-15T10:00:00Z',
+          read: false,
+        },
+        priority: 'high' as const,
+      };
+
+      prismaService.notification.create.mockResolvedValue(mockNotification);
+
+      // Act
+      const result = await service.createDelivery(systemDelivery);
+
+      // Assert: no dedup query, row always created
+      expect(prismaService.notification.findFirst).not.toHaveBeenCalled();
+      expect(prismaService.notification.create).toHaveBeenCalledTimes(1);
+      expect(result.deliveryId).toBeDefined();
+      expect(result.deduplicated).toBe(false);
     });
   });
 

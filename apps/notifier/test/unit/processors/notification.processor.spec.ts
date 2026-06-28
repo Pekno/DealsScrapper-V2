@@ -50,7 +50,9 @@ describe('NotificationProcessor', () => {
     };
 
     const mockDeliveryTracking = {
-      createDelivery: jest.fn().mockResolvedValue('delivery-123'),
+      createDelivery: jest
+        .fn()
+        .mockResolvedValue({ deliveryId: 'delivery-123', deduplicated: false }),
       recordAttempt: jest.fn().mockResolvedValue(undefined),
       scheduleRetry: jest.fn().mockResolvedValue(undefined),
       getDelivery: jest.fn().mockResolvedValue({ id: 'delivery-123', attempts: [] }),
@@ -185,6 +187,26 @@ describe('NotificationProcessor', () => {
 
       // Should not send via any channel
       expect(websocketGateway.sendToUser).not.toHaveBeenCalled();
+    });
+
+    it('should not re-send when the delivery was deduplicated (retried/re-detected job)', async () => {
+      // Arrange: allowed, but createDelivery reports an existing (already-delivered) row
+      preferencesService.shouldSendNotification.mockResolvedValue({
+        allowed: true,
+        channels: ['websocket', 'email'],
+      });
+      deliveryTracking.createDelivery.mockResolvedValue({
+        deliveryId: 'existing-delivery-1',
+        deduplicated: true,
+      });
+
+      // Act
+      await processor.handleDealMatch(mockJob as any);
+
+      // Assert: dedup short-circuits before any channel send or attempt record
+      expect(deliveryTracking.createDelivery).toHaveBeenCalled();
+      expect(websocketGateway.sendToUser).not.toHaveBeenCalled();
+      expect(deliveryTracking.recordAttempt).not.toHaveBeenCalled();
     });
   });
 

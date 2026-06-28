@@ -38,6 +38,12 @@ export interface DealMatchNotificationData {
   matchId: string;
   userId: string;
   filterId: string;
+  /**
+   * Event-granular idempotency key set by the scraper producer.
+   * `deal-match-${matchId}` for an initial match, `deal-match-${matchId}-drop-${price}`
+   * for a price-drop re-alert. Falls back to `deal-match-${matchId}` when omitted.
+   */
+  dedupKey?: string;
   dealData: {
     title: string;
     price: number;
@@ -123,6 +129,9 @@ export class NotificationProcessor {
   @Process('deal-match-found')
   async handleDealMatch(job: Job<DealMatchNotificationData>) {
     const { userId, dealData, priority, matchId, filterId } = job.data;
+    // Event-granular idempotency key: use the producer-supplied value, falling
+    // back to the match-granular key so initial matches still dedup deterministically.
+    const dedupKey = job.data.dedupKey ?? `deal-match-${matchId}`;
 
     return withErrorHandling(
       this.logger,
@@ -231,6 +240,7 @@ export class NotificationProcessor {
           title: `🎯 New Deal: ${dealData.title}`,
           message: `${priceInfo} at ${dealData.merchant}`,
           matchId,
+          dedupKey,
           filterId,
           data: {
             dealData: {
@@ -256,12 +266,24 @@ export class NotificationProcessor {
         };
 
         // 6. Create delivery tracking record with unified payload
-        const deliveryId = await this.deliveryTracking.createDelivery({
-          userId,
-          type: 'deal-match',
-          priority: priority as 'high' | 'normal' | 'low',
-          notificationPayload: unifiedNotificationPayload,
-        });
+        const { deliveryId, deduplicated } =
+          await this.deliveryTracking.createDelivery({
+            userId,
+            type: 'deal-match',
+            priority: priority as 'high' | 'normal' | 'low',
+            notificationPayload: unifiedNotificationPayload,
+          });
+
+        // Idempotent short-circuit: a deduplicated event already produced a
+        // delivery (and its channel sends). Re-sending here would deliver a
+        // duplicate email for a retried/re-detected job, so stop after the
+        // dedup is recorded.
+        if (deduplicated) {
+          this.logger.debug(
+            `⏭️ Deal match for user ${userId} deduplicated to existing delivery ${deliveryId}; skipping re-send`
+          );
+          return;
+        }
 
         // 7. Send notifications via selected channels with delivery tracking
         const deliveryResults = await this.sendNotificationsWithTracking(
@@ -335,7 +357,8 @@ export class NotificationProcessor {
         };
 
         // Create delivery tracking for verification email
-        const deliveryId = await this.deliveryTracking.createDelivery({
+        // Verification payloads carry no matchId/dedupKey, so they never dedup.
+        const { deliveryId } = await this.deliveryTracking.createDelivery({
           userId,
           type: 'verification',
           priority: 'high',
@@ -471,7 +494,8 @@ export class NotificationProcessor {
           read: false,
         };
 
-        const deliveryId = await this.deliveryTracking.createDelivery({
+        // Password-reset payloads carry no matchId/dedupKey, so they never dedup.
+        const { deliveryId } = await this.deliveryTracking.createDelivery({
           userId,
           type: 'password-reset',
           priority: 'high',

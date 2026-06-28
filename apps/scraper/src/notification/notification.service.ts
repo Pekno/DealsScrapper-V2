@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PrismaService } from '@dealscrapper/database';
@@ -7,7 +7,9 @@ import {
   NotificationPriority,
   QUEUE_PRIORITIES,
 } from '@dealscrapper/shared-types';
+import { createServiceLogger } from '@dealscrapper/shared-logging';
 import { extractErrorMessage } from '@dealscrapper/shared';
+import { scraperLogConfig } from '../config/logging.config.js';
 import { DealProcessingUtils, type PriceDrop } from '../common/deal-processing.utils.js';
 
 /**
@@ -28,6 +30,14 @@ export interface ExternalNotificationPayload {
   readonly dealData: DealNotificationDetails;
   readonly priority: NotificationPriority;
   readonly timestamp: Date;
+  /**
+   * Event-granular idempotency key, identical to the Bull jobId for this enqueue.
+   * The notifier dedups on `(userId, dedupKey)` so a price-drop re-alert is not
+   * swallowed by the earlier match notification:
+   * - `deal-match-${matchId}` for the initial match
+   * - `deal-match-${matchId}-drop-${price}` for a price-drop re-alert
+   */
+  readonly dedupKey?: string;
 }
 
 /**
@@ -66,7 +76,7 @@ export interface NotificationJobOptions {
 
 @Injectable()
 export class NotificationService {
-  private readonly logger = new Logger(NotificationService.name);
+  private readonly logger = createServiceLogger(scraperLogConfig);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -88,9 +98,12 @@ export class NotificationService {
         `Queuing notification for match ${match.id} (filter: ${match.filter.name})`
       );
 
-      const notificationPayload = this.createNotificationPayload(match);
+      // The Bull jobId and the notifier's event-granular dedupKey are the SAME
+      // string, so the queue-level dedup and the notifier-level dedup agree.
+      const jobId = this.buildJobId(dedupKey ?? match.id);
+      const notificationPayload = this.createNotificationPayload(match, jobId);
       const jobOptions = this.createJobOptions(
-        dedupKey ?? match.id,
+        jobId,
         notificationPayload.priority
       );
 
@@ -174,17 +187,31 @@ export class NotificationService {
   }
 
   /**
+   * Builds the deterministic Bull jobId / notifier dedupKey from the inner key.
+   * For a plain deal match the inner key is the match id; for a price-drop
+   * re-alert it also encodes the dropped price (`${matchId}-drop-${price}`) so
+   * the SAME price won't re-fire but a new lower price will (value-edge dedup).
+   */
+  private buildJobId(innerKey: string): string {
+    return `deal-match-${innerKey}`;
+  }
+
+  /**
    * Creates notification payload from match data
    * @param match - The match with associated filter and article data
+   * @param dedupKey - Event-granular key, identical to the Bull jobId, so the
+   *   notifier can dedup a drop re-alert distinctly from the initial match
    * @returns Structured notification payload for external service
    */
   private createNotificationPayload(
-    match: Match & { filter: Filter; article: Article }
+    match: Match & { filter: Filter; article: Article },
+    dedupKey: string
   ): ExternalNotificationPayload {
     return {
       matchId: match.id,
       userId: match.filter.userId,
       filterId: match.filter.id,
+      dedupKey,
       dealData: {
         title: match.article.title,
         price: match.article.currentPrice ?? 0,
@@ -204,20 +231,17 @@ export class NotificationService {
   }
 
   /**
-   * Creates queue job options based on notification priority
-   * @param dedupKey - Deterministic Bull jobId key. For a plain deal match this
-   *   is the match id (so a retried handler can't duplicate the notification);
-   *   for a price-drop re-alert it also encodes the dropped price so the SAME
-   *   price won't re-fire but a new lower price will (value-edge dedup).
+   * Creates queue job options for an already-built jobId.
+   * @param jobId - Deterministic Bull jobId (also the notifier dedupKey)
    * @param priority - Notification priority level
    * @returns Queue job configuration options
    */
   private createJobOptions(
-    dedupKey: string,
+    jobId: string,
     priority: NotificationPriority
   ): NotificationJobOptions {
     return {
-      jobId: `deal-match-${dedupKey}`,
+      jobId,
       priority: QUEUE_PRIORITIES[priority],
       attempts: 3,
       backoff: {
@@ -255,12 +279,15 @@ export class NotificationService {
       const errorMessage = extractErrorMessage(error);
       this.logger.error(
         `Failed to persist 'notified' flag for match ${matchId}: ${errorMessage}. ` +
-          `Notification was already queued; NOT re-throwing to avoid re-queuing. ` +
-          `If the upstream job is retried, this match may re-fire (duplicate notification) ` +
-          `because the notified flag was not written.`
+          `Notification was already queued; NOT re-throwing. ` +
+          `A re-queue on upstream retry is harmless: the notifier dedups idempotently ` +
+          `on (userId, dedupKey), so the duplicate is caught downstream and never re-sent.`
       );
-      // Intentionally do not re-throw: the notification was already queued, so
-      // re-throwing would trigger an upstream retry that re-sends the same match.
+      // Intentionally do not re-throw: re-throwing would trigger an upstream
+      // retry that re-enqueues the notification. The notifier's (userId, dedupKey)
+      // dedup makes that re-enqueue a no-op, so swallowing here cannot cause a
+      // duplicate notification — it only leaves the `notified` flag stale, which
+      // is logged at error level above for visibility.
     }
   }
 }

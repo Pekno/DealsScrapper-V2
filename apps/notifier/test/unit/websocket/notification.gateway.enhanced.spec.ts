@@ -639,9 +639,10 @@ describe('NotificationGateway - Enhanced Tests', () => {
       };
 
       // Mock service responses
-      deliveryTrackingService.createDelivery.mockResolvedValue(
-        'notification-123'
-      );
+      deliveryTrackingService.createDelivery.mockResolvedValue({
+        deliveryId: 'notification-123',
+        deduplicated: false,
+      });
       deliveryTrackingService.recordAttempt.mockResolvedValue(undefined);
       emailService.sendEmail.mockResolvedValue(true);
       prismaService.user.findUnique.mockResolvedValue({
@@ -692,9 +693,10 @@ describe('NotificationGateway - Enhanced Tests', () => {
       };
 
       // Mock service responses for offline user
-      deliveryTrackingService.createDelivery.mockResolvedValue(
-        'notification-123'
-      );
+      deliveryTrackingService.createDelivery.mockResolvedValue({
+        deliveryId: 'notification-123',
+        deduplicated: false,
+      });
       deliveryTrackingService.recordAttempt.mockResolvedValue(undefined);
       emailService.sendEmail.mockResolvedValue(false); // Email fails
       prismaService.user.findUnique.mockResolvedValue({

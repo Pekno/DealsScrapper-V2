@@ -5,7 +5,20 @@
  * to specific TypeScript types, avoiding unsafe `as unknown as` casts.
  */
 import { Prisma } from '@prisma/client';
-import { UnifiedNotificationPayload, NotificationType } from '@dealscrapper/shared-types';
+import { UnifiedNotificationPayload } from '@dealscrapper/shared-types';
+
+/**
+ * The notification `type` values that can appear in a stored content payload.
+ * Mirrors the `UnifiedNotificationPayload['type']` union — the single set of
+ * types the producers ever persist (DEAL_MATCH, SYSTEM, ALERT).
+ */
+type UnifiedNotificationType = UnifiedNotificationPayload['type'];
+
+const VALID_NOTIFICATION_TYPES: readonly UnifiedNotificationType[] = [
+  'DEAL_MATCH',
+  'SYSTEM',
+  'ALERT',
+];
 
 /**
  * Result of a deserialization operation
@@ -22,12 +35,16 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Validates that a value is a valid NotificationType
+ * Validates that a value is a notification type that can appear in a stored
+ * content payload. Producers only ever persist DEAL_MATCH, SYSTEM, or ALERT
+ * (the `UnifiedNotificationPayload['type']` union); transactional flows such as
+ * email-verification and password-reset are persisted as SYSTEM, so no extra
+ * literals are accepted here.
  */
-function isValidNotificationType(value: unknown): value is NotificationType {
+function isValidNotificationType(value: unknown): value is UnifiedNotificationType {
   return (
     typeof value === 'string' &&
-    ['DEAL_MATCH', 'SYSTEM', 'VERIFICATION', 'WELCOME', 'DIGEST', 'REMINDER'].includes(value)
+    (VALID_NOTIFICATION_TYPES as readonly string[]).includes(value)
   );
 }
 
@@ -65,9 +82,12 @@ export function deserializeNotificationPayload(
     return { success: false, error: 'Missing or invalid message field' };
   }
 
-  if (typeof json.userId !== 'string') {
-    return { success: false, error: 'Missing or invalid userId field' };
-  }
+  // NOTE: `userId` is intentionally NOT validated here. The stored content is a
+  // `UnifiedNotificationPayload`, which has no `userId` field — the owning user
+  // is the `Notification.userId` COLUMN, which is the source of truth threaded
+  // through the send path as an explicit parameter. Requiring it on the payload
+  // made every deal-match content fail deserialization and silently dropped all
+  // deliveries.
 
   // The payload passes validation - return it as the expected type
   // The structure has been validated, so this cast is now safe

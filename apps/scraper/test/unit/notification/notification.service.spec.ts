@@ -181,6 +181,20 @@ describe('NotificationService', () => {
       expect(queueCall[2].jobId).toBe(`deal-match-${mockMatch.id}`);
     });
 
+    it('carries an event-granular dedupKey in the job data equal to the jobId', async () => {
+      mockPrismaService.match.update.mockResolvedValue(mockMatch);
+
+      await service.queueExternalNotification(mockMatch);
+
+      // The notifier dedups on job.data.dedupKey; it must equal the Bull jobId so
+      // queue-level and notifier-level dedup agree on the same event key.
+      const queueCall = externalNotificationQueue.add.mock.calls[0];
+      const jobData = queueCall[1];
+      const jobOptions = queueCall[2];
+      expect(jobData.dedupKey).toBe(`deal-match-${mockMatch.id}`);
+      expect(jobData.dedupKey).toBe(jobOptions.jobId);
+    });
+
     it('should prevent duplicate notifications to avoid user annoyance', async () => {
       mockPrismaService.match.update.mockResolvedValue(mockMatch);
 
@@ -231,6 +245,7 @@ describe('NotificationService', () => {
         matchId: 'match-123',
         userId: 'user-123',
         filterId: 'filter-123',
+        dedupKey: 'deal-match-match-123', // event-granular key, equals the Bull jobId
         dealData: {
           title: 'Gaming Laptop Dell',
           price: 999.99,
@@ -268,6 +283,25 @@ describe('NotificationService', () => {
       // can't re-fire but a new lower price will
       const queueCall = externalNotificationQueue.add.mock.calls[0];
       expect(queueCall[2].jobId).toBe('deal-match-match-123-drop-999.99');
+    });
+
+    it('enqueues a drop with a dedupKey distinct from the initial match key', async () => {
+      mockPrismaService.match.findMany.mockResolvedValue([
+        { ...mockMatch, notifiedAt: null },
+      ]);
+      mockPrismaService.match.update.mockResolvedValue(mockMatch);
+
+      await service.queuePriceDropAlerts('article-123', drop);
+
+      // The drop carries its own per-price dedupKey in the job DATA, so the
+      // notifier delivers it instead of swallowing it as the earlier match.
+      const queueCall = externalNotificationQueue.add.mock.calls[0];
+      const jobData = queueCall[1];
+      const matchKey = `deal-match-${mockMatch.id}`;
+      const dropKey = `deal-match-${mockMatch.id}-drop-${drop.currentPrice}`;
+      expect(jobData.dedupKey).toBe(dropKey);
+      expect(jobData.dedupKey).toBe(queueCall[2].jobId);
+      expect(jobData.dedupKey).not.toBe(matchKey);
     });
 
     it('skips a match still inside the cooldown window', async () => {

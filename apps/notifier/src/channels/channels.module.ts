@@ -4,8 +4,6 @@ import { createServiceLogger } from '@dealscrapper/shared-logging';
 import { notifierLogConfig } from '../config/logging.config.js';
 import * as nodemailer from 'nodemailer';
 import { EmailService } from './email.service.js';
-import { TemplateModule } from '../templates/template.module.js';
-import { TemplateService } from '../templates/template.service.js';
 import { GmailTransport, ResendTransport, MailhogTransport, NoopTransport } from './transports/index.js';
 import type { EmailTransport } from './transports/index.js';
 
@@ -14,7 +12,6 @@ import { NODEMAILER_TRANSPORT, EMAIL_TRANSPORT } from './tokens.js';
 const logger = createServiceLogger(notifierLogConfig);
 
 @Module({
-  imports: [TemplateModule],
   providers: [
     {
       provide: NODEMAILER_TRANSPORT,
@@ -56,8 +53,7 @@ const logger = createServiceLogger(notifierLogConfig);
       inject: [SharedConfigService, NODEMAILER_TRANSPORT],
     },
     EmailService,
-    TemplateService,
   ],
-  exports: [EmailService, TemplateService],
+  exports: [EmailService],
 })
 export class ChannelsModule {}
