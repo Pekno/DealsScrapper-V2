@@ -5,9 +5,14 @@ import type { Element } from 'domhandler';
 import { SiteSource } from '@dealscrapper/shared-types';
 import type { IUrlOptimizer } from '../base/url-optimizer.interface.js';
 import type { IExpiryResolver } from '../base/expiry-resolver.interface.js';
-import { BaseSiteAdapter, type ListingElementId } from '../base/base-site-adapter.js';
+import {
+  BaseSiteAdapter,
+  type ListingElementId,
+  type SelectorExtractor,
+} from '../base/base-site-adapter.js';
 import { DealabsUrlOptimizer } from './dealabs-url-optimizer.js';
 import { DealabsExpiryResolver } from './dealabs-expiry-resolver.js';
+import { extractDealabsListingFromSelectors } from './dealabs-selector-extractor.js';
 import { LlmExtractionService } from '../../llm-extraction/llm-extraction.service.js';
 
 @Injectable()
@@ -34,6 +39,10 @@ export class DealabsAdapter extends BaseSiteAdapter {
       value: $element.attr('data-thread-id') ?? $element.attr('id') ?? 'unknown',
       label: 'thread-id',
     };
+  }
+
+  protected getSelectorExtractor(): SelectorExtractor {
+    return extractDealabsListingFromSelectors;
   }
 
   buildCategoryUrl(categorySlug: string, page: number = 1): string {

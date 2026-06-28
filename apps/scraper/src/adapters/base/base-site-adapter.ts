@@ -21,6 +21,16 @@ export interface ListingElementId {
 }
 
 /**
+ * Selector-first extraction for a single listing card. When it returns a
+ * listing with all required stable fields present, the LLM call is skipped for
+ * that card. Adapters opt in by overriding {@link BaseSiteAdapter.getSelectorExtractor}.
+ */
+export type SelectorExtractor = (
+  $: CheerioAPI,
+  $element: Cheerio<Element>,
+) => { listing: UniversalListing | null; allRequiredPresent: boolean };
+
+/**
  * Shared base for all site adapters. Implements the identical listing-extraction
  * pipeline once (HTML validation, cheerio parsing, per-element LLM delegation via
  * Promise.allSettled, and result aggregation). Subclasses supply only the
@@ -54,9 +64,12 @@ export abstract class BaseSiteAdapter implements ISiteAdapter {
       elements.push($(element) as Cheerio<Element>);
     });
 
+    const selectorExtractor = this.getSelectorExtractor();
+    const stats = { selectorHits: 0, llmFallbacks: 0 };
+
     const results = await Promise.allSettled(
       elements.map(($element, index) =>
-        this.extractSingleListing($, $element, sourceUrl, index),
+        this.extractSingleListing($, $element, sourceUrl, index, selectorExtractor, stats),
       ),
     );
 
@@ -78,6 +91,11 @@ export abstract class BaseSiteAdapter implements ISiteAdapter {
         `Failed to extract ${failedCount} of ${failedCount + listings.length} ${this.displayName} listings`,
       );
     }
+    if (selectorExtractor) {
+      this.logger.log(
+        `Hybrid extraction ${this.displayName}: ${stats.selectorHits} selector-hits, ${stats.llmFallbacks} LLM-fallbacks`,
+      );
+    }
     this.logger.log(`Extracted ${listings.length} ${this.displayName} listings from ${sourceUrl}`);
     return { listings, llmTimeMs };
   }
@@ -87,8 +105,20 @@ export abstract class BaseSiteAdapter implements ISiteAdapter {
     $element: Cheerio<Element>,
     sourceUrl: string,
     index: number,
+    selectorExtractor: SelectorExtractor | null,
+    stats: { selectorHits: number; llmFallbacks: number },
   ): Promise<{ listing: UniversalListing; ollamaMs: number } | null> {
     const elementId = this.getElementId($element);
+
+    if (selectorExtractor) {
+      const { listing, allRequiredPresent } = selectorExtractor($, $element);
+      if (allRequiredPresent && listing !== null) {
+        stats.selectorHits++;
+        return { listing, ollamaMs: 0 };
+      }
+      stats.llmFallbacks++;
+    }
+
     try {
       return await this.llmExtraction.extract({
         siteId: this.siteId,
@@ -109,6 +139,15 @@ export abstract class BaseSiteAdapter implements ISiteAdapter {
    * failure logging in {@link extractSingleListing}.
    */
   protected abstract getElementId($element: Cheerio<Element>): ListingElementId;
+
+  /**
+   * Opt-in hook for selector-first (hybrid) extraction. Returning a function
+   * enables the CSS gate that skips the LLM when all required stable fields are
+   * present. Defaults to null (all-LLM); only Dealabs overrides it today.
+   */
+  protected getSelectorExtractor(): SelectorExtractor | null {
+    return null;
+  }
 
   abstract buildCategoryUrl(categorySlug: string, page?: number): string;
 

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DealabsAdapter } from '../dealabs.adapter';
 import { DealabsUrlOptimizer } from '../dealabs-url-optimizer';
@@ -155,6 +157,65 @@ describe('DealabsAdapter', () => {
       );
       expect(listings.listings).toHaveLength(0);
       expect(llmExtractionService.extract).not.toHaveBeenCalled();
+    });
+
+    it('should skip the LLM for a priced card whose selectors all hit', async () => {
+      // Arrange — real priced fixture exposes externalId, url and currentPrice
+      const html = readFileSync(
+        join(
+          __dirname,
+          '..',
+          '..',
+          '..',
+          'llm-extraction',
+          'sites',
+          'dealabs',
+          'fixtures',
+          'dealabs-001.html',
+        ),
+        'utf-8',
+      );
+
+      // Act
+      const result = await adapter.extractListings(
+        html,
+        'https://www.dealabs.com/groupe/high-tech',
+      );
+
+      // Assert
+      expect(llmExtractionService.extract).not.toHaveBeenCalled();
+      expect(result.listings).toHaveLength(1);
+      expect(result.listings[0].externalId).toBe('3317035');
+      expect(result.listings[0].currentPrice).toBe(969);
+      expect(result.llmTimeMs).toBe(0);
+    });
+
+    it('should fall back to the LLM for a free card with no price span', async () => {
+      // Arrange — fixture 002 is a "Gratuit" deal with no span.thread-price
+      const html = readFileSync(
+        join(
+          __dirname,
+          '..',
+          '..',
+          '..',
+          'llm-extraction',
+          'sites',
+          'dealabs',
+          'fixtures',
+          'dealabs-002.html',
+        ),
+        'utf-8',
+      );
+
+      // Act
+      const result = await adapter.extractListings(
+        html,
+        'https://www.dealabs.com/groupe/high-tech',
+      );
+
+      // Assert
+      expect(llmExtractionService.extract).toHaveBeenCalledTimes(1);
+      expect(result.listings).toHaveLength(1);
     });
 
     it('should skip listings where LLM extraction fails', async () => {
