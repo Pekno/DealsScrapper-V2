@@ -226,7 +226,6 @@ describe('filter-engine divergence vectors (scraper)', () => {
 
     it('V6 weighted-score-scale target: normalized 0-100 => score 50 (CONVERGED both engines)', async () => {
       const expression: RuleBasedFilterExpression = {
-        scoreMode: 'weighted',
         minScore: 0,
         rules: [
           { field: 'temperature', operator: '>=', value: 100, weight: 1.0 },

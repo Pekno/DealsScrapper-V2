@@ -201,15 +201,6 @@ export class RuleBasedFilterExpressionDto {
   @IsOptional()
   @IsNumber()
   minScore?: number = 50;
-
-  @ApiPropertyOptional({
-    description: 'Scoring calculation method',
-    example: 'weighted',
-    default: 'weighted',
-  })
-  @IsOptional()
-  @IsString()
-  scoreMode?: 'weighted' | 'percentage' | 'points' = 'weighted';
 }
 
 // Example complex filter expressions
@@ -267,7 +258,6 @@ export const EXAMPLE_FILTERS = {
     ],
     matchLogic: 'AND',
     minScore: 75,
-    scoreMode: 'weighted',
   } as RuleBasedFilterExpression,
 
   // Console deals with time constraints
@@ -307,6 +297,5 @@ export const EXAMPLE_FILTERS = {
     ],
     matchLogic: 'AND',
     minScore: 80,
-    scoreMode: 'weighted',
   } as RuleBasedFilterExpression,
 };

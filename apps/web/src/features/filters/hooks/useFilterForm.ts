@@ -213,7 +213,6 @@ export function useFilterForm(
         }),
         matchLogic: 'AND',
         minScore: 0,
-        scoreMode: 'weighted',
       };
 
       if (isEditMode && onUpdate && filterId) {

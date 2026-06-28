@@ -27,8 +27,7 @@ Method: `evaluateFilterExpression(expression, deal): RuleEvaluationResult`
 interface RuleBasedFilterExpression {
   rules: (FilterRule | FilterRuleGroup)[];
   matchLogic?: 'AND' | 'OR' | 'NOT';  // How to combine top-level rules
-  minScore?: number;                   // Minimum score threshold (default: 50)
-  scoreMode?: 'weighted' | 'percentage' | 'points';
+  minScore?: number;                   // Minimum score threshold (default: 50). Score is normalized 0-100.
 }
 
 interface FilterRule {
@@ -101,8 +100,7 @@ interface FilterRuleGroup {
     }
   ],
   matchLogic: 'AND',
-  minScore: 75,
-  scoreMode: 'weighted'
+  minScore: 75
 }
 ```
 
@@ -127,7 +125,7 @@ Site derivation: a filter with Dealabs categories → matches Dealabs articles o
 - Each rule contributes a weighted score (default weight: 1.0)
 - Groups have collective weights
 - `minScore` threshold gates match/no-match
-- `scoreMode` options: `weighted` (default), `percentage`, `points`
+- Score is always normalized to 0-100: `(earnedWeight / totalWeight) * 100`
 
 ## Database Storage
 

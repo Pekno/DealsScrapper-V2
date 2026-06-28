@@ -1154,9 +1154,7 @@ describe('FilterMatcherService', () => {
             weight: 1.0,
           }, // Passes
         ],
-        minScore: 5.0,
-        scoreMode: 'weighted',
-        matchLogic: 'AND',
+        minScore: 5.0,        matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
@@ -1173,9 +1171,7 @@ describe('FilterMatcherService', () => {
           { field: 'currentPrice', operator: '<=', value: 1500, weight: 1.0 }, // Passes
           { field: 'temperature', operator: '>=', value: 200, weight: 3.0 }, // Fails
         ],
-        minScore: 50, // 50%
-        scoreMode: 'weighted',
-        matchLogic: 'AND',
+        minScore: 50, // 50%        matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
@@ -1186,7 +1182,7 @@ describe('FilterMatcherService', () => {
       expect(result).toBe(false);
     });
 
-    it('should calculate percentage score correctly', async () => {
+    it('should calculate normalized score with mixed pass/fail rules', async () => {
       const expression: RuleBasedFilterExpression = {
         rules: [
           { field: 'currentPrice', operator: '<=', value: 1500, weight: 1.0 }, // Passes
@@ -1200,7 +1196,6 @@ describe('FilterMatcherService', () => {
           { field: 'isCoupon', operator: 'IS_TRUE', value: true, weight: 1.0 }, // Fails
         ],
         minScore: 70, // 70%
-        scoreMode: 'percentage',
         matchLogic: 'AND',
       };
 
@@ -1212,60 +1207,13 @@ describe('FilterMatcherService', () => {
       expect(result).toBe(true);
     });
 
-    it('should not match when percentage score below threshold', async () => {
-      const expression: RuleBasedFilterExpression = {
-        rules: [
-          { field: 'currentPrice', operator: '<=', value: 1500, weight: 1.0 }, // Passes
-          { field: 'temperature', operator: '>=', value: 200, weight: 1.0 }, // Fails
-          {
-            field: 'freeShipping',
-            operator: 'IS_TRUE',
-            value: true,
-            weight: 1.0,
-          }, // Passes
-          { field: 'isCoupon', operator: 'IS_TRUE', value: true, weight: 1.0 }, // Fails
-        ],
-        minScore: 60, // 60%
-        scoreMode: 'percentage',
-        matchLogic: 'AND',
-      };
-
-      const result = service.evaluateFilterExpression(
-        expression,
-        mockDealabsArticle
-      );
-      // Earned: 2.0, Total: 4.0 = 50% < 60%
-      expect(result).toBe(false);
-    });
-
-    it('should calculate points score (same as weighted)', async () => {
-      const expression: RuleBasedFilterExpression = {
-        rules: [
-          { field: 'currentPrice', operator: '<=', value: 1500, weight: 10 }, // Passes
-          { field: 'temperature', operator: '>=', value: 100, weight: 5 }, // Passes
-        ],
-        minScore: 12,
-        scoreMode: 'points',
-        matchLogic: 'AND',
-      };
-
-      const result = service.evaluateFilterExpression(
-        expression,
-        mockDealabsArticle
-      );
-      // Points: 10 + 5 = 15 >= 12
-      expect(result).toBe(true);
-    });
-
     it('should default weight to 1.0 when not specified', async () => {
       const expression: RuleBasedFilterExpression = {
         rules: [
           { field: 'currentPrice', operator: '<=', value: 1500 }, // No weight
           { field: 'temperature', operator: '>=', value: 100 }, // No weight
         ],
-        minScore: 1.5,
-        scoreMode: 'weighted',
-        matchLogic: 'AND',
+        minScore: 1.5,        matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
@@ -1288,9 +1236,7 @@ describe('FilterMatcherService', () => {
             weight: 2.0,
           }, // Passes
         ],
-        minScore: 3.0,
-        scoreMode: 'weighted',
-        matchLogic: 'AND',
+        minScore: 3.0,        matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
@@ -1307,9 +1253,7 @@ describe('FilterMatcherService', () => {
           { field: 'currentPrice', operator: '<=', value: 1500, weight: 1.0 },
           { field: 'temperature', operator: '>=', value: 100, weight: 1.0 },
         ],
-        minScore: 0,
-        scoreMode: 'weighted',
-        matchLogic: 'AND',
+        minScore: 0,        matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(

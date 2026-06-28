@@ -75,7 +75,6 @@ describe('FiltersService - User Deal Discovery & Personalization', () => {
       rules: [],
       matchLogic: 'AND',
       minScore: 50,
-      scoreMode: 'weighted',
     },
     immediateNotifications: true,
     digestFrequency: 'daily',
@@ -171,7 +170,6 @@ describe('FiltersService - User Deal Discovery & Personalization', () => {
           ],
           matchLogic: 'AND',
           minScore: 50,
-          scoreMode: 'weighted',
         },
         immediateNotifications: true,
         digestFrequency: 'daily',
@@ -231,7 +229,6 @@ describe('FiltersService - User Deal Discovery & Personalization', () => {
           ],
           matchLogic: 'AND',
           minScore: 50,
-          scoreMode: 'weighted',
         },
       };
 

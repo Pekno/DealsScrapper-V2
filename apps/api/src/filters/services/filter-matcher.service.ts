@@ -117,7 +117,7 @@ export class FilterMatcherService {
     expression: RuleBasedFilterExpression,
     article: ArticleWrapper
   ): boolean {
-    const { rules, matchLogic = 'AND', minScore, scoreMode } = expression;
+    const { rules, matchLogic = 'AND', minScore } = expression;
 
     // If no rules, filter matches nothing
     if (!rules || rules.length === 0) {
@@ -126,15 +126,11 @@ export class FilterMatcherService {
 
     // If scoring is enabled, calculate score
     if (minScore !== undefined && minScore > 0) {
-      const score = this.calculateScore(
-        rules,
-        article,
-        scoreMode ?? 'weighted'
-      );
+      const score = this.calculateScore(rules, article);
       const matches = score >= minScore;
 
       this.logger.debug(
-        `Score-based evaluation: ${score} (min: ${minScore}, mode: ${scoreMode}) -> ${matches}`
+        `Score-based evaluation: ${score} (min: ${minScore}) -> ${matches}`
       );
 
       return matches;
@@ -631,13 +627,11 @@ export class FilterMatcherService {
    *
    * @param rules - Array of FilterRule or FilterRuleGroup
    * @param article - ArticleWrapper to score
-   * @param scoreMode - Scoring method (weighted, percentage, points)
-   * @returns Calculated score
+   * @returns Calculated score, normalized 0-100
    */
   private calculateScore(
     rules: (FilterRule | FilterRuleGroup)[],
-    article: ArticleWrapper,
-    scoreMode: 'weighted' | 'percentage' | 'points'
+    article: ArticleWrapper
   ): number {
     let totalWeight = 0;
     let earnedWeight = 0;
@@ -652,19 +646,7 @@ export class FilterMatcherService {
       }
     }
 
-    switch (scoreMode) {
-      case 'weighted':
-      case 'percentage':
-        // Normalized 0-100 (Phase 7 V6: converged with the scraper engine, where
-        // `weighted` and `percentage` are identical; the API previously returned
-        // raw earned weight, so a `weighted` filter back-matched on a different
-        // scale than it live-matched).
-        return totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
-      case 'points':
-        // Raw earned weight (the one un-normalized mode, matching the scraper).
-        return earnedWeight;
-      default:
-        return totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
-    }
+    // Score is normalized 0-100.
+    return totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
   }
 }

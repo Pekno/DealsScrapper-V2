@@ -70,7 +70,6 @@ export interface RuleBasedFilterExpression {
   rules: (FilterRule | FilterRuleGroup)[];
   matchLogic?: LogicalOperator;
   minScore?: number;
-  scoreMode?: 'weighted' | 'percentage' | 'points';
 }
 
 // Field definitions with types and labels for the UI

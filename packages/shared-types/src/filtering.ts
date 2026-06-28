@@ -210,7 +210,6 @@ export interface RuleBasedFilterExpression {
   // Global settings
   matchLogic?: LogicalOperator; // How to combine rules (default: AND)
   minScore?: number; // Minimum score threshold
-  scoreMode?: 'weighted' | 'percentage' | 'points'; // Scoring method
 }
 
 // Filter expression input type for API

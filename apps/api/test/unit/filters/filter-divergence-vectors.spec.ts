@@ -249,7 +249,6 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
       // minScore 50 straddles the two scales: raw would be FALSE (1.0 < 50),
       // normalized is TRUE (50 >= 50). Passing proves the API now normalizes.
       const expression: RuleBasedFilterExpression = {
-        scoreMode: 'weighted',
         minScore: 50,
         rules: [
           { field: 'temperature', operator: '>=', value: 100, weight: 1.0 }, // 150 >= 100 TRUE

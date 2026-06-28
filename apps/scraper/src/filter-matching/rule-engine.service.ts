@@ -22,7 +22,6 @@ const RULE_ENGINE_CONFIG = {
   DEFAULTS: {
     WEIGHT: 1.0,
     MATCH_LOGIC: 'AND' as const,
-    SCORE_MODE: 'weighted' as const,
     CASE_SENSITIVE: false,
   },
   /** Regular expression flags */
@@ -44,9 +43,6 @@ const RULE_ENGINE_CONFIG = {
       /\b(apple|samsung|sony|lg|dell|hp|asus|acer|lenovo|microsoft|nintendo|xbox|playstation)\b/i,
   },
 } as const;
-
-/** Types for strict score mode validation */
-type ScoreMode = 'weighted' | 'percentage' | 'points';
 
 /** Enhanced rule evaluation result with comprehensive match details */
 export interface RuleEvaluationResult {
@@ -99,12 +95,9 @@ export class RuleEngineService {
         matchLogic
       );
 
-      const scoreMode =
-        expression.scoreMode ?? RULE_ENGINE_CONFIG.DEFAULTS.SCORE_MODE;
       const finalScore = this.calculateFinalScore(
         evaluationContext.totalScore,
-        evaluationContext.maxPossibleScore,
-        scoreMode
+        evaluationContext.maxPossibleScore
       );
 
       const minScoreThreshold =
@@ -435,27 +428,16 @@ export class RuleEngineService {
   }
 
   /**
-   * Calculate final score based on scoring mode and total possible points.
-   * Supports weighted, percentage, and raw points scoring methods.
+   * Calculate final score by normalizing the accumulated score to a 0-100 scale.
    * @param totalScore - Accumulated score from all matching rules
    * @param maxPossibleScore - Maximum possible score from all rules
-   * @param scoreMode - Scoring calculation method to apply
-   * @returns Final calculated score value
+   * @returns Final calculated score value (0-100)
    */
   private calculateFinalScore(
     totalScore: number,
-    maxPossibleScore: number,
-    scoreMode: ScoreMode
+    maxPossibleScore: number
   ): number {
-    switch (scoreMode) {
-      case 'percentage':
-        return maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
-      case 'points':
-        return totalScore;
-      case 'weighted':
-      default:
-        return maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
-    }
+    return maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
   }
 
   // =====================================

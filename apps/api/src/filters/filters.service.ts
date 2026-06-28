@@ -1041,7 +1041,7 @@ export class FiltersService {
     expression: RuleBasedFilterExpression,
     article: ArticleWrapper
   ): number {
-    const { rules, minScore, scoreMode = 'weighted' } = expression;
+    const { rules, minScore } = expression;
 
     // If no rules, no score
     if (!rules || rules.length === 0) {
@@ -1066,18 +1066,7 @@ export class FiltersService {
         }
       }
 
-      switch (scoreMode) {
-        // Phase 7 V6: `weighted` is normalized 0-100 (identical to `percentage`),
-        // matching FilterMatcherService.calculateScore and the scraper engine, so
-        // the stored match score uses the same scale the match decision used.
-        case 'percentage':
-        case 'weighted':
-          return totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
-        case 'points':
-          return earnedWeight;
-        default:
-          return totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
-      }
+      return totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
     }
 
     // For boolean matching, use count of matching rules as score

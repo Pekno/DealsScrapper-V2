@@ -113,7 +113,6 @@ export class CreateFilterDto {
       ],
       matchLogic: 'AND',
       minScore: 75,
-      scoreMode: 'weighted',
     },
   })
   @IsObject()
