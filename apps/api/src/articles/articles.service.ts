@@ -14,11 +14,13 @@
  * 5. Transform to response DTOs
  */
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { ElasticsearchService } from '@nestjs/elasticsearch';
+import { Redis } from 'ioredis';
 import { PrismaService } from '@dealscrapper/database';
 import { ArticleWrapper, SiteSource } from '@dealscrapper/shared-types/article';
 import { ProductSuggestion } from '@dealscrapper/shared-types';
+import { SIMILAR_CACHE_REDIS_CLIENT } from './articles.constants.js';
 import { SearchArticlesDto } from './dto/search-articles.dto.js';
 import {
   ArticleResponseDto,
@@ -72,6 +74,10 @@ const SIMILAR_DEFAULTS = {
   priceRangeFactorHigh: 1.15, // +15%
 } as const;
 
+/** Cache key prefix + TTL for findSimilar results. */
+const SIMILAR_CACHE_KEY_PREFIX = 'similar:v1:';
+const SIMILAR_CACHE_TTL_SECONDS = 600; // ~10 minutes
+
 @Injectable()
 export class ArticlesService {
   private readonly logger = createServiceLogger(apiLogConfig);
@@ -79,7 +85,8 @@ export class ArticlesService {
 
   constructor(
     private readonly elasticsearchService: ElasticsearchService,
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    @Inject(SIMILAR_CACHE_REDIS_CLIENT) private readonly redis: Redis
   ) {}
 
   /**
@@ -179,6 +186,25 @@ export class ArticlesService {
    *   source article is not found
    */
   async findSimilar(articleId: string): Promise<ProductSuggestion[]> {
+    const cacheKey = `${SIMILAR_CACHE_KEY_PREFIX}${articleId}`;
+
+    const cached = await this.readCache(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+
+    const result = await this.computeSimilar(articleId);
+    await this.writeCache(cacheKey, result);
+    return result;
+  }
+
+  /**
+   * Compute cross-site product suggestions live (Elasticsearch more_like_this).
+   * The cache wrapper lives in {@link findSimilar}.
+   */
+  private async computeSimilar(
+    articleId: string
+  ): Promise<ProductSuggestion[]> {
     let source: ArticleWrapper;
     try {
       // PrismaService extends PrismaClient, so it's type-compatible
@@ -209,6 +235,42 @@ export class ArticlesService {
     } catch (error) {
       this.logger.error(`Similar article search failed: ${error}`);
       throw error;
+    }
+  }
+
+  /**
+   * Read cached suggestions. Fails open: any Redis error (unavailable, parse
+   * failure) logs a warning and returns null so the caller computes live.
+   */
+  private async readCache(
+    cacheKey: string
+  ): Promise<ProductSuggestion[] | null> {
+    try {
+      const raw = await this.redis.get(cacheKey);
+      return raw === null ? null : (JSON.parse(raw) as ProductSuggestion[]);
+    } catch (error) {
+      this.logger.warn(`Similar cache read failed for ${cacheKey}: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Store suggestions with a TTL. Fails open: a cache write failure must never
+   * break the endpoint, so it is logged and swallowed.
+   */
+  private async writeCache(
+    cacheKey: string,
+    suggestions: ProductSuggestion[]
+  ): Promise<void> {
+    try {
+      await this.redis.set(
+        cacheKey,
+        JSON.stringify(suggestions),
+        'EX',
+        SIMILAR_CACHE_TTL_SECONDS
+      );
+    } catch (error) {
+      this.logger.warn(`Similar cache write failed for ${cacheKey}: ${error}`);
     }
   }
 

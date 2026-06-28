@@ -4,6 +4,7 @@ import { ElasticsearchService } from '@nestjs/elasticsearch';
 import { PrismaService } from '@dealscrapper/database';
 import { ArticlesService } from '../../../src/articles/articles.service';
 import { SearchArticlesDto } from '../../../src/articles/dto/search-articles.dto';
+import { SIMILAR_CACHE_REDIS_CLIENT } from '../../../src/articles/articles.constants';
 import { SiteSource } from '@dealscrapper/shared-types/article';
 
 // Mock ArticleWrapper static methods
@@ -103,6 +104,12 @@ describe('ArticlesService - Article Search & Retrieval', () => {
     search: jest.fn(),
   };
 
+  // Minimal ioredis surface used by the findSimilar cache (get/set).
+  const mockRedis = {
+    get: jest.fn(),
+    set: jest.fn(),
+  };
+
   const mockPrismaService = {
     article: {
       findUnique: jest.fn(),
@@ -122,6 +129,11 @@ describe('ArticlesService - Article Search & Retrieval', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
+    // Default: cache miss + successful write, so findSimilar tests exercise
+    // the live compute path unless a test overrides these.
+    mockRedis.get.mockResolvedValue(null);
+    mockRedis.set.mockResolvedValue('OK');
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ArticlesService,
@@ -132,6 +144,10 @@ describe('ArticlesService - Article Search & Retrieval', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: SIMILAR_CACHE_REDIS_CLIENT,
+          useValue: mockRedis,
         },
       ],
     }).compile();
@@ -608,6 +624,79 @@ describe('ArticlesService - Article Search & Retrieval', () => {
       // Assert
       expect(result).toEqual([]);
       expect(mockElasticsearchService.search).not.toHaveBeenCalled();
+    });
+
+    describe('Redis cache', () => {
+      const cachedSuggestions = [
+        {
+          articleId: 'article-cached',
+          score: 9.9,
+          source: SiteSource.LEBONCOIN,
+          title: 'Cached suggestion',
+          currentPrice: 999,
+          url: 'https://leboncoin.fr/items/cached',
+          scrapedAt: '2025-01-17T08:00:00Z',
+        },
+      ];
+
+      it('should return the cached value on a cache hit without hitting Elasticsearch', async () => {
+        // Arrange
+        mockRedis.get.mockResolvedValue(JSON.stringify(cachedSuggestions));
+
+        // Act
+        const result = await service.findSimilar('article-1');
+
+        // Assert
+        expect(mockRedis.get).toHaveBeenCalledWith('similar:v1:article-1');
+        expect(result).toEqual(cachedSuggestions);
+        expect(ArticleWrapper.load).not.toHaveBeenCalled();
+        expect(mockElasticsearchService.search).not.toHaveBeenCalled();
+        expect(mockRedis.set).not.toHaveBeenCalled();
+      });
+
+      it('should compute via Elasticsearch and store the result with a 600s TTL on a cache miss', async () => {
+        // Arrange
+        mockRedis.get.mockResolvedValue(null);
+        (ArticleWrapper.load as jest.Mock).mockResolvedValue(
+          mockDealabsArticle
+        );
+        mockElasticsearchService.search.mockResolvedValue({
+          hits: { hits: [similarEsHit] },
+        });
+
+        // Act
+        const result = await service.findSimilar('article-1');
+
+        // Assert
+        expect(mockElasticsearchService.search).toHaveBeenCalledTimes(1);
+        expect(result).toHaveLength(1);
+        expect(mockRedis.set).toHaveBeenCalledWith(
+          'similar:v1:article-1',
+          JSON.stringify(result),
+          'EX',
+          600
+        );
+      });
+
+      it('should fail open and still return the computed result when the Redis client throws', async () => {
+        // Arrange — both read and write reject (Redis unavailable)
+        mockRedis.get.mockRejectedValue(new Error('Redis down'));
+        mockRedis.set.mockRejectedValue(new Error('Redis down'));
+        (ArticleWrapper.load as jest.Mock).mockResolvedValue(
+          mockDealabsArticle
+        );
+        mockElasticsearchService.search.mockResolvedValue({
+          hits: { hits: [similarEsHit] },
+        });
+
+        // Act
+        const result = await service.findSimilar('article-1');
+
+        // Assert — endpoint is unaffected by the cache failure
+        expect(mockElasticsearchService.search).toHaveBeenCalledTimes(1);
+        expect(result).toHaveLength(1);
+        expect(result[0].articleId).toBe('article-99');
+      });
     });
   });
 });
