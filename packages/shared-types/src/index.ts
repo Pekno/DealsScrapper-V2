@@ -3,6 +3,7 @@ export * from './deals.js';
 export * from './scraping.js';
 export * from './filtering.js';
 export * from './filter-utils.js';
+export * from './filter-evaluator.js';
 export * from './enums.js';
 export * from './responses.js';
 export * from './auth.js';
