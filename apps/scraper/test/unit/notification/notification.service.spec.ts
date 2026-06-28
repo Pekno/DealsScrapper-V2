@@ -74,6 +74,7 @@ describe('NotificationService', () => {
       imageUrl: 'https://example.com/image.jpg',
       isExpired: false,
       isCoupon: false,
+      location: null,
       siteId: 'dealabs',
       isActive: true,
       scrapedAt: new Date(),

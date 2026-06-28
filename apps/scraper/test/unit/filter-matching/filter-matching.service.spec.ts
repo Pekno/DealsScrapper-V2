@@ -551,10 +551,23 @@ describe('FilterMatchingService', () => {
     const mockDeals: Article[] = [
       {
         id: 'article-1',
+        externalId: 'deal-article-1',
+        siteId: 'dealabs',
         categoryId: 'cartes-graphiques-id',
+        categoryPath: ['Informatique', 'Composants'],
         title: 'RTX 4080 Gaming Card',
+        description: null,
+        url: 'https://test.com/deal',
+        imageUrl: null,
         currentPrice: 500,
         temperature: 120,
+        isActive: true,
+        isExpired: false,
+        expiresAt: null,
+        location: null,
+        publishedAt: null,
+        scrapedAt: new Date(),
+        updatedAt: new Date(),
       } as Article,
     ];
 
