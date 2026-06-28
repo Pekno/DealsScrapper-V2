@@ -60,7 +60,7 @@ export type SiteId = keyof typeof SITE_DEFINITIONS;
 /**
  * Array of all valid site IDs
  */
-export const SITE_IDS = Object.keys(SITE_DEFINITIONS) as SiteId[];
+export const SITE_IDS = Object.keys(SITE_DEFINITIONS);
 
 /**
  * Check if a string is a valid site ID

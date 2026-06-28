@@ -108,7 +108,9 @@ export class DashboardMetricsDto {
   @ApiProperty({ description: 'Total matches found' })
   totalMatches: number;
 
-  @ApiProperty({ description: 'Average Ollama LLM extraction time over last 7 days (ms)' })
+  @ApiProperty({
+    description: 'Average Ollama LLM extraction time over last 7 days (ms)',
+  })
   avgOllamaExtractionTimeMs: number;
 
   @ApiProperty({ description: 'Number of active user sessions' })
@@ -176,7 +178,10 @@ export class ScraperWorkerDto {
   @ApiProperty({ description: 'Worker identifier' })
   id: string;
 
-  @ApiPropertyOptional({ description: 'Site this worker is dedicated to (e.g. dealabs, vinted)', example: 'dealabs' })
+  @ApiPropertyOptional({
+    description: 'Site this worker is dedicated to (e.g. dealabs, vinted)',
+    example: 'dealabs',
+  })
   site?: string;
 
   @ApiProperty({ description: 'Worker health status', example: 'healthy' })
@@ -197,13 +202,22 @@ export class ScraperWorkerDto {
   @ApiProperty({ description: 'Last heartbeat timestamp (ISO)' })
   lastHeartbeat: string;
 
-  @ApiPropertyOptional({ description: 'Browser pool statistics', type: ScraperBrowserPoolDto })
+  @ApiPropertyOptional({
+    description: 'Browser pool statistics',
+    type: ScraperBrowserPoolDto,
+  })
   browserPool?: ScraperBrowserPoolDto;
 
-  @ApiPropertyOptional({ description: 'Scraping statistics', type: ScraperScrapingStatsDto })
+  @ApiPropertyOptional({
+    description: 'Scraping statistics',
+    type: ScraperScrapingStatsDto,
+  })
   scraping?: ScraperScrapingStatsDto;
 
-  @ApiPropertyOptional({ description: 'LLM extraction statistics (live, resets on restart)', type: ScraperLlmStatsDto })
+  @ApiPropertyOptional({
+    description: 'LLM extraction statistics (live, resets on restart)',
+    type: ScraperLlmStatsDto,
+  })
   llm?: ScraperLlmStatsDto;
 }
 
@@ -211,9 +225,15 @@ export class ScraperWorkerDto {
  * Combined scheduler health with nested scraper worker details
  */
 export class SchedulerHealthResponseDto {
-  @ApiProperty({ description: 'Scheduler service health', type: ServiceHealthDto })
+  @ApiProperty({
+    description: 'Scheduler service health',
+    type: ServiceHealthDto,
+  })
   scheduler: ServiceHealthDto;
 
-  @ApiProperty({ description: 'Registered scraper workers', type: [ScraperWorkerDto] })
+  @ApiProperty({
+    description: 'Registered scraper workers',
+    type: [ScraperWorkerDto],
+  })
   scrapers: ScraperWorkerDto[];
 }

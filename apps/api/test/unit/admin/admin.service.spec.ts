@@ -80,7 +80,8 @@ describe('AdminService', () => {
   const mockPasswordResetService = {
     generateResetToken: jest.fn().mockReturnValue({
       token: 'mock-reset-token',
-      resetUrl: 'http://localhost:3000/auth/reset-password?token=mock-reset-token',
+      resetUrl:
+        'http://localhost:3000/auth/reset-password?token=mock-reset-token',
     }),
   };
 
@@ -107,7 +108,10 @@ describe('AdminService', () => {
         { provide: HttpService, useValue: mockHttpService },
         { provide: SharedConfigService, useValue: mockSharedConfigService },
         { provide: PasswordResetService, useValue: mockPasswordResetService },
-        { provide: getQueueToken('notifications'), useValue: mockNotificationQueue },
+        {
+          provide: getQueueToken('notifications'),
+          useValue: mockNotificationQueue,
+        },
       ],
     }).compile();
 
@@ -134,7 +138,8 @@ describe('AdminService', () => {
     });
     mockPasswordResetService.generateResetToken.mockReturnValue({
       token: 'mock-reset-token',
-      resetUrl: 'http://localhost:3000/auth/reset-password?token=mock-reset-token',
+      resetUrl:
+        'http://localhost:3000/auth/reset-password?token=mock-reset-token',
     });
   });
 
@@ -148,7 +153,11 @@ describe('AdminService', () => {
 
       // Arrange: all remote services healthy (wrapped in StandardApiResponse)
       const healthyResponse = {
-        data: { success: true, data: { status: 'healthy' }, message: 'Service is healthy' },
+        data: {
+          success: true,
+          data: { status: 'healthy' },
+          message: 'Service is healthy',
+        },
         status: 200,
       };
       mockHttpService.get.mockReturnValue(of(healthyResponse));
@@ -171,7 +180,11 @@ describe('AdminService', () => {
 
       // Arrange: notifier fails, others succeed
       const healthyResponse = {
-        data: { success: true, data: { status: 'healthy' }, message: 'Service is healthy' },
+        data: {
+          success: true,
+          data: { status: 'healthy' },
+          message: 'Service is healthy',
+        },
         status: 200,
       };
       mockHttpService.get.mockImplementation((url: string) => {
@@ -200,7 +213,7 @@ describe('AdminService', () => {
 
       // Arrange: all remote services time out
       mockHttpService.get.mockReturnValue(
-        throwError(() => new Error('timeout of 5000ms exceeded')),
+        throwError(() => new Error('timeout of 5000ms exceeded'))
       );
 
       const result = await service.getDashboardMetrics();
@@ -227,13 +240,15 @@ describe('AdminService', () => {
     };
 
     it('should delegate to userRepository.findManyPaginated when no search is provided', async () => {
-      mockUserRepository.findManyPaginated.mockResolvedValue(mockPaginatedResult);
+      mockUserRepository.findManyPaginated.mockResolvedValue(
+        mockPaginatedResult
+      );
 
       const result = await service.getUsers(1, 20);
 
       expect(mockUserRepository.findManyPaginated).toHaveBeenCalledWith(
         undefined,
-        { page: 1, limit: 20 },
+        { page: 1, limit: 20 }
       );
       expect(mockUserRepository.searchUsers).not.toHaveBeenCalled();
       expect(result.data).toHaveLength(1);
@@ -253,7 +268,9 @@ describe('AdminService', () => {
     });
 
     it('should strip password from returned users', async () => {
-      mockUserRepository.findManyPaginated.mockResolvedValue(mockPaginatedResult);
+      mockUserRepository.findManyPaginated.mockResolvedValue(
+        mockPaginatedResult
+      );
 
       const result = await service.getUsers(1, 20);
 
@@ -274,7 +291,7 @@ describe('AdminService', () => {
 
       expect(mockUserRepository.update).toHaveBeenCalledWith(
         { id: 'user-1' },
-        { role: 'ADMIN' },
+        { role: 'ADMIN' }
       );
       expect(result.role).toBe('ADMIN');
     });
@@ -292,9 +309,9 @@ describe('AdminService', () => {
 
   describe('deleteUser', () => {
     it('should throw ForbiddenException when trying to delete self', async () => {
-      await expect(
-        service.deleteUser('admin-id', 'admin-id'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.deleteUser('admin-id', 'admin-id')).rejects.toThrow(
+        ForbiddenException
+      );
 
       expect(mockUserRepository.findUnique).not.toHaveBeenCalled();
       expect(mockUserRepository.delete).not.toHaveBeenCalled();
@@ -304,7 +321,7 @@ describe('AdminService', () => {
       mockUserRepository.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.deleteUser('nonexistent-id', 'admin-id'),
+        service.deleteUser('nonexistent-id', 'admin-id')
       ).rejects.toThrow(NotFoundException);
 
       expect(mockUserRepository.findUnique).toHaveBeenCalledWith({
@@ -332,9 +349,9 @@ describe('AdminService', () => {
     it('should throw NotFoundException when user does not exist', async () => {
       mockUserRepository.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.resetUserPassword('nonexistent-id'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.resetUserPassword('nonexistent-id')).rejects.toThrow(
+        NotFoundException
+      );
 
       expect(mockUserRepository.findUnique).toHaveBeenCalledWith({
         id: 'nonexistent-id',
@@ -355,11 +372,9 @@ describe('AdminService', () => {
 
         const result = await service.resetUserPassword('user-1');
 
-        expect(mockPasswordResetService.generateResetToken).toHaveBeenCalledWith(
-          'user-1',
-          mockUser.email,
-          '24h',
-        );
+        expect(
+          mockPasswordResetService.generateResetToken
+        ).toHaveBeenCalledWith('user-1', mockUser.email, '24h');
         expect(mockNotificationQueue.add).toHaveBeenCalledWith(
           'password-reset',
           expect.objectContaining({
@@ -367,7 +382,7 @@ describe('AdminService', () => {
             email: mockUser.email,
             resetUrl: expect.any(String),
           }),
-          expect.any(Object),
+          expect.any(Object)
         );
         expect(result).toBeNull();
       });
@@ -401,7 +416,12 @@ describe('AdminService', () => {
       const healthyResponse = {
         data: {
           success: true,
-          data: { status: 'healthy', service: 'api', uptime: 100, version: '1.0.0' },
+          data: {
+            status: 'healthy',
+            service: 'api',
+            uptime: 100,
+            version: '1.0.0',
+          },
           message: 'Service is healthy',
         },
         status: 200,
@@ -418,7 +438,7 @@ describe('AdminService', () => {
 
     it('should return healthy status even when the health endpoint fails', async () => {
       mockHttpService.get.mockReturnValue(
-        throwError(() => new Error('Connection refused')),
+        throwError(() => new Error('Connection refused'))
       );
       mockSharedConfigService.getServicePort.mockReturnValue(3001);
 
@@ -449,7 +469,7 @@ describe('AdminService', () => {
 
     it('should return unreachable status when notifier is down', async () => {
       mockHttpService.get.mockReturnValue(
-        throwError(() => new Error('Connection refused')),
+        throwError(() => new Error('Connection refused'))
       );
 
       const result = await service.getNotifierHealth();
@@ -524,7 +544,7 @@ describe('AdminService', () => {
 
     it('should return unreachable scheduler when scheduler is down', async () => {
       mockHttpService.get.mockReturnValue(
-        throwError(() => new Error('Connection refused')),
+        throwError(() => new Error('Connection refused'))
       );
 
       const result = await service.getSchedulerHealth();

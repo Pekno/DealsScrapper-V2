@@ -86,9 +86,7 @@ export class DatabaseSeederService {
 
       if (existingUser) {
         if (existingUser.role === Role.ADMIN) {
-          this.logger.log(
-            `👤 Admin user already exists: ${adminEmail}`
-          );
+          this.logger.log(`👤 Admin user already exists: ${adminEmail}`);
           return;
         }
 
@@ -103,7 +101,9 @@ export class DatabaseSeederService {
       }
 
       if (!adminPassword) {
-        this.logger.warn(`ADMIN_PASSWORD not set — cannot create new admin user for ${adminEmail}, skipping`);
+        this.logger.warn(
+          `ADMIN_PASSWORD not set — cannot create new admin user for ${adminEmail}, skipping`
+        );
         return;
       }
 

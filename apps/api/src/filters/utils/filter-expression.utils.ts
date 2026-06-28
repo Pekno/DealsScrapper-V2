@@ -32,7 +32,7 @@ export function convertFilterExpressionFromDb(
  * @returns Parsed RuleBasedFilterExpression or null if invalid
  */
 export function parseFilterExpression(
-  json: Prisma.JsonValue | null | undefined,
+  json: Prisma.JsonValue | null | undefined
 ): RuleBasedFilterExpression | null {
   if (!json || typeof json !== 'object' || Array.isArray(json)) {
     return null;

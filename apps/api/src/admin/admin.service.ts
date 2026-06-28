@@ -10,7 +10,10 @@ import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '@dealscrapper/database';
 import type { User } from '@dealscrapper/database';
 import type { UserRole } from '@dealscrapper/shared-types';
-import { NotificationPriority, QUEUE_PRIORITIES } from '@dealscrapper/shared-types';
+import {
+  NotificationPriority,
+  QUEUE_PRIORITIES,
+} from '@dealscrapper/shared-types';
 import { createServiceLogger } from '@dealscrapper/shared-logging';
 import { SharedConfigService } from '@dealscrapper/shared-config';
 import { UserRepository } from '../repositories/user.repository.js';
@@ -137,7 +140,9 @@ export class AdminService {
    * If no email provider is configured, skips the queue and returns the resetUrl so the
    * admin can share it with the user manually.
    */
-  async resetUserPassword(userId: string): Promise<{ resetUrl: string } | null> {
+  async resetUserPassword(
+    userId: string
+  ): Promise<{ resetUrl: string } | null> {
     const user = await this.userRepository.findUnique({ id: userId });
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
@@ -146,13 +151,13 @@ export class AdminService {
     const { resetUrl } = this.passwordResetService.generateResetToken(
       user.id,
       user.email,
-      '24h',
+      '24h'
     );
 
     const emailConfig = this.sharedConfig.getEmailConfig();
     if (emailConfig.service === 'none') {
       this.logger.log(
-        `Admin initiated password reset for user ${userId} — no email provider configured, returning reset URL`,
+        `Admin initiated password reset for user ${userId} — no email provider configured, returning reset URL`
       );
       return { resetUrl };
     }
@@ -164,11 +169,11 @@ export class AdminService {
         priority: QUEUE_PRIORITIES[NotificationPriority.HIGH],
         attempts: 3,
         backoff: { type: 'exponential' as const, delay: 2000 },
-      },
+      }
     );
 
     this.logger.log(
-      `Admin initiated password reset for user ${userId} — notification queued to ${user.email}`,
+      `Admin initiated password reset for user ${userId} — notification queued to ${user.email}`
     );
     return null;
   }
@@ -196,7 +201,10 @@ export class AdminService {
     try {
       return await this.fetchServiceHealth(notifierUrl);
     } catch {
-      return { status: 'unreachable', details: { error: 'Notifier service unreachable' } };
+      return {
+        status: 'unreachable',
+        details: { error: 'Notifier service unreachable' },
+      };
     }
   }
 
@@ -221,9 +229,12 @@ export class AdminService {
 
     try {
       const response = await firstValueFrom(
-        this.httpService.get<Record<string, unknown>>(`${schedulerUrl}/health`, {
-          timeout: HEALTH_CHECK_TIMEOUT_MS,
-        })
+        this.httpService.get<Record<string, unknown>>(
+          `${schedulerUrl}/health`,
+          {
+            timeout: HEALTH_CHECK_TIMEOUT_MS,
+          }
+        )
       );
       const healthData = this.unwrapHealthResponse(response.data);
       schedulerHealth = {
@@ -232,7 +243,9 @@ export class AdminService {
       };
 
       // Extract worker details from the scheduler response
-      const workers = healthData?.workers as Record<string, unknown> | undefined;
+      const workers = healthData?.workers as
+        | Record<string, unknown>
+        | undefined;
       if (workers && Array.isArray(workers.details)) {
         workerDetails = workers.details;
       }
@@ -240,7 +253,10 @@ export class AdminService {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger.warn(`Scheduler health check failed: ${errorMessage}`);
-      schedulerHealth = { status: 'unreachable', details: { error: errorMessage } };
+      schedulerHealth = {
+        status: 'unreachable',
+        details: { error: errorMessage },
+      };
     }
 
     // Fetch individual scraper health in parallel
@@ -283,9 +299,12 @@ export class AdminService {
   }): Promise<ScraperWorkerDto> {
     try {
       const response = await firstValueFrom(
-        this.httpService.get<Record<string, unknown>>(`${worker.endpoint}/health`, {
-          timeout: HEALTH_CHECK_TIMEOUT_MS,
-        })
+        this.httpService.get<Record<string, unknown>>(
+          `${worker.endpoint}/health`,
+          {
+            timeout: HEALTH_CHECK_TIMEOUT_MS,
+          }
+        )
       );
 
       const data = this.unwrapHealthResponse(response.data);
@@ -426,30 +445,37 @@ export class AdminService {
     avgOllamaExtractionTimeMs: number;
   }> {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const [totalUsers, totalFilters, totalMatches, activeSessions, avgOllamaResult] =
-      await Promise.all([
-        this.prisma.user.count(),
-        this.prisma.filter.count(),
-        this.prisma.match.count(),
-        this.prisma.userSession.count({
-          where: { expiresAt: { gt: new Date() } },
-        }),
-        this.prisma.scrapingJob.aggregate({
-          _avg: { ollamaExtractionTimeMs: true },
-          where: {
-            status: 'completed',
-            ollamaExtractionTimeMs: { not: null },
-            completedAt: { gte: sevenDaysAgo },
-          },
-        }),
-      ]);
+    const [
+      totalUsers,
+      totalFilters,
+      totalMatches,
+      activeSessions,
+      avgOllamaResult,
+    ] = await Promise.all([
+      this.prisma.user.count(),
+      this.prisma.filter.count(),
+      this.prisma.match.count(),
+      this.prisma.userSession.count({
+        where: { expiresAt: { gt: new Date() } },
+      }),
+      this.prisma.scrapingJob.aggregate({
+        _avg: { ollamaExtractionTimeMs: true },
+        where: {
+          status: 'completed',
+          ollamaExtractionTimeMs: { not: null },
+          completedAt: { gte: sevenDaysAgo },
+        },
+      }),
+    ]);
 
     return {
       totalUsers,
       totalFilters,
       totalMatches,
       activeSessions,
-      avgOllamaExtractionTimeMs: Math.round(avgOllamaResult._avg.ollamaExtractionTimeMs ?? 0),
+      avgOllamaExtractionTimeMs: Math.round(
+        avgOllamaResult._avg.ollamaExtractionTimeMs ?? 0
+      ),
     };
   }
 

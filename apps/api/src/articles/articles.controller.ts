@@ -14,13 +14,7 @@
  * - Pagination
  */
 
-import {
-  Controller,
-  Get,
-  Query,
-  Param,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Query, Param, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -75,7 +69,8 @@ export class ArticlesController {
     name: 'sites',
     required: false,
     type: String,
-    description: 'Comma-separated list of sites to filter by (dealabs, vinted, leboncoin)',
+    description:
+      'Comma-separated list of sites to filter by (dealabs, vinted, leboncoin)',
     example: 'dealabs,vinted',
   })
   @ApiQuery({
@@ -213,7 +208,7 @@ export class ArticlesController {
     description: 'Invalid search parameters',
   })
   async search(
-    @Query() query: SearchArticlesDto,
+    @Query() query: SearchArticlesDto
   ): Promise<StandardApiResponse<ArticleListResponseDto>> {
     const result = await this.articlesService.search(query);
     return createSuccessResponse(result, 'Articles retrieved successfully');
@@ -249,7 +244,7 @@ export class ArticlesController {
     description: 'Article not found',
   })
   async getById(
-    @Param('id') id: string,
+    @Param('id') id: string
   ): Promise<StandardApiResponse<ArticleResponseDto>> {
     const article = await this.articlesService.getById(id);
     return createSuccessResponse(article, 'Article retrieved successfully');

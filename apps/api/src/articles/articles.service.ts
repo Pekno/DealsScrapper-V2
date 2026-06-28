@@ -17,10 +17,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ElasticsearchService } from '@nestjs/elasticsearch';
 import { PrismaService } from '@dealscrapper/database';
-import {
-  ArticleWrapper,
-  SiteSource,
-} from '@dealscrapper/shared-types/article';
+import { ArticleWrapper, SiteSource } from '@dealscrapper/shared-types/article';
 import { SearchArticlesDto } from './dto/search-articles.dto.js';
 import {
   ArticleResponseDto,
@@ -66,7 +63,7 @@ export class ArticlesService {
 
   constructor(
     private readonly elasticsearchService: ElasticsearchService,
-    private readonly prisma: PrismaService,
+    private readonly prisma: PrismaService
   ) {}
 
   /**
@@ -93,7 +90,9 @@ export class ArticlesService {
       // Extract article IDs from search results
       const articleIds = response.hits.hits
         .map((hit: { _id?: string }) => hit._id)
-        .filter((id: string | undefined): id is string => typeof id === 'string');
+        .filter(
+          (id: string | undefined): id is string => typeof id === 'string'
+        );
 
       if (articleIds.length === 0) {
         return {
@@ -106,21 +105,18 @@ export class ArticlesService {
 
       // Load full ArticleWrappers from database
       // PrismaService extends PrismaClient, so it's type-compatible
-      const wrappers = await ArticleWrapper.loadMany(
-        articleIds,
-        this.prisma,
-      );
+      const wrappers = await ArticleWrapper.loadMany(articleIds, this.prisma);
 
       // Transform to response DTOs
       const articles = wrappers.map((wrapper) =>
-        this.wrapperToResponseDto(wrapper),
+        this.wrapperToResponseDto(wrapper)
       );
 
       // Get total hits
       const total =
         typeof response.hits.total === 'number'
           ? response.hits.total
-          : response.hits.total?.value ?? 0;
+          : (response.hits.total?.value ?? 0);
 
       return {
         articles,

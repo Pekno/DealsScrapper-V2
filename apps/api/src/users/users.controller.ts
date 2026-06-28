@@ -41,7 +41,6 @@ type SafeUserProfile = Omit<User, 'password' | 'loginAttempts' | 'lockedUntil'>;
  */
 type UserWithoutPassword = Omit<User, 'password'>;
 
-
 @ApiTags('Users')
 @ApiBearerAuth()
 @ApiUnauthorizedResponse({
@@ -149,7 +148,10 @@ export class UsersController {
       updateProfileDto
     );
     const { loginAttempts, lockedUntil, ...safeUpdatedUser } = updatedUser;
-    return createSuccessResponse(safeUpdatedUser as SafeUserProfile, 'Profile updated successfully');
+    return createSuccessResponse(
+      safeUpdatedUser as SafeUserProfile,
+      'Profile updated successfully'
+    );
   }
 
   @Patch('notifications')

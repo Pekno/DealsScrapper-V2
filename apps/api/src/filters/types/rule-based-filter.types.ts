@@ -24,7 +24,10 @@ import type {
   ComputedField,
   FieldTypeMap,
 } from '@dealscrapper/shared-types';
-import { COMMON_FILTERABLE_FIELDS, SiteSource } from '@dealscrapper/shared-types';
+import {
+  COMMON_FILTERABLE_FIELDS,
+  SiteSource,
+} from '@dealscrapper/shared-types';
 
 // Re-export shared types for convenience (maintains backward compatibility)
 export type {
@@ -98,7 +101,8 @@ export class FilterRuleDto {
   weight?: number = 1.0;
 
   @ApiPropertyOptional({
-    description: 'Site-specific rule (only applies to articles from this site). If not specified, applies to all sites.',
+    description:
+      'Site-specific rule (only applies to articles from this site). If not specified, applies to all sites.',
     example: SiteSource.DEALABS,
     enum: SiteSource,
   })

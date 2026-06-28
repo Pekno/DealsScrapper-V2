@@ -155,10 +155,7 @@ describe('ArticlesService - Article Search & Retrieval', () => {
 
       const esResponse = {
         hits: {
-          hits: [
-            { _id: 'article-1' },
-            { _id: 'article-2' },
-          ],
+          hits: [{ _id: 'article-1' }, { _id: 'article-2' }],
           total: { value: 2 },
         },
       };
@@ -191,7 +188,7 @@ describe('ArticlesService - Article Search & Retrieval', () => {
               ]),
             },
           }),
-        }),
+        })
       );
     });
 
@@ -233,7 +230,9 @@ describe('ArticlesService - Article Search & Retrieval', () => {
       };
 
       mockElasticsearchService.search.mockResolvedValue(esResponse);
-      (ArticleWrapper.loadMany as jest.Mock).mockResolvedValue([mockDealabsArticle]);
+      (ArticleWrapper.loadMany as jest.Mock).mockResolvedValue([
+        mockDealabsArticle,
+      ]);
 
       // Act
       await service.search(searchDto);
@@ -250,7 +249,7 @@ describe('ArticlesService - Article Search & Retrieval', () => {
               ]),
             },
           }),
-        }),
+        })
       );
     });
 
@@ -269,7 +268,9 @@ describe('ArticlesService - Article Search & Retrieval', () => {
       };
 
       mockElasticsearchService.search.mockResolvedValue(esResponse);
-      (ArticleWrapper.loadMany as jest.Mock).mockResolvedValue([mockVintedArticle]);
+      (ArticleWrapper.loadMany as jest.Mock).mockResolvedValue([
+        mockVintedArticle,
+      ]);
 
       // Act
       await service.search(searchDto);
@@ -288,7 +289,7 @@ describe('ArticlesService - Article Search & Retrieval', () => {
               ]),
             },
           }),
-        }),
+        })
       );
     });
 
@@ -307,7 +308,9 @@ describe('ArticlesService - Article Search & Retrieval', () => {
       };
 
       mockElasticsearchService.search.mockResolvedValue(esResponse);
-      (ArticleWrapper.loadMany as jest.Mock).mockResolvedValue([mockDealabsArticle]);
+      (ArticleWrapper.loadMany as jest.Mock).mockResolvedValue([
+        mockDealabsArticle,
+      ]);
 
       // Act
       await service.search(searchDto);
@@ -327,7 +330,7 @@ describe('ArticlesService - Article Search & Retrieval', () => {
               ]),
             },
           }),
-        }),
+        })
       );
     });
 
@@ -346,7 +349,9 @@ describe('ArticlesService - Article Search & Retrieval', () => {
       };
 
       mockElasticsearchService.search.mockResolvedValue(esResponse);
-      (ArticleWrapper.loadMany as jest.Mock).mockResolvedValue([mockVintedArticle]);
+      (ArticleWrapper.loadMany as jest.Mock).mockResolvedValue([
+        mockVintedArticle,
+      ]);
 
       // Act
       await service.search(searchDto);
@@ -366,7 +371,7 @@ describe('ArticlesService - Article Search & Retrieval', () => {
               ]),
             },
           }),
-        }),
+        })
       );
     });
 
@@ -382,7 +387,9 @@ describe('ArticlesService - Article Search & Retrieval', () => {
       };
 
       mockElasticsearchService.search.mockResolvedValue(esResponse);
-      (ArticleWrapper.loadMany as jest.Mock).mockResolvedValue([mockDealabsArticle]);
+      (ArticleWrapper.loadMany as jest.Mock).mockResolvedValue([
+        mockDealabsArticle,
+      ]);
 
       // Act
       await service.search(searchDto);
@@ -391,17 +398,21 @@ describe('ArticlesService - Article Search & Retrieval', () => {
       expect(mockElasticsearchService.search).toHaveBeenCalledWith(
         expect.objectContaining({
           query: { match_all: {} },
-        }),
+        })
       );
     });
 
     it('should handle Elasticsearch errors gracefully', async () => {
       // Arrange
       const searchDto: SearchArticlesDto = { q: 'test' };
-      mockElasticsearchService.search.mockRejectedValue(new Error('ES connection failed'));
+      mockElasticsearchService.search.mockRejectedValue(
+        new Error('ES connection failed')
+      );
 
       // Act & Assert
-      await expect(service.search(searchDto)).rejects.toThrow('ES connection failed');
+      await expect(service.search(searchDto)).rejects.toThrow(
+        'ES connection failed'
+      );
     });
   });
 
@@ -443,15 +454,21 @@ describe('ArticlesService - Article Search & Retrieval', () => {
       (ArticleWrapper.load as jest.Mock).mockRejectedValue(notFoundError);
 
       // Act & Assert
-      await expect(service.getById('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.getById('nonexistent')).rejects.toThrow(
+        NotFoundException
+      );
     });
 
     it('should rethrow other errors', async () => {
       // Arrange
-      (ArticleWrapper.load as jest.Mock).mockRejectedValue(new Error('Database error'));
+      (ArticleWrapper.load as jest.Mock).mockRejectedValue(
+        new Error('Database error')
+      );
 
       // Act & Assert
-      await expect(service.getById('article-1')).rejects.toThrow('Database error');
+      await expect(service.getById('article-1')).rejects.toThrow(
+        'Database error'
+      );
     });
   });
 });

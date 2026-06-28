@@ -75,8 +75,12 @@ import { FilterMatcherService } from '../../../src/filters/services/filter-match
 
 // Type-safe mock helpers, mirroring filter-matcher.service.spec.ts
 type MockArticleBase = Partial<Article> &
-  Pick<Article, 'id' | 'siteId' | 'title' | 'url' | 'categoryId' | 'scrapedAt' | 'updatedAt'>;
-type MockDealabsExtension = Partial<ArticleDealabs> & Pick<ArticleDealabs, 'articleId'>;
+  Pick<
+    Article,
+    'id' | 'siteId' | 'title' | 'url' | 'categoryId' | 'scrapedAt' | 'updatedAt'
+  >;
+type MockDealabsExtension = Partial<ArticleDealabs> &
+  Pick<ArticleDealabs, 'articleId'>;
 
 describe('filter-engine divergence vectors (Phase 7)', () => {
   let service: FilterMatcherService;
@@ -120,7 +124,7 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
   const article = new ArticleWrapper(
     baseArticle as Article,
     dealabsExtension as ArticleDealabs,
-    SiteSource.DEALABS,
+    SiteSource.DEALABS
   );
 
   beforeEach(async () => {
@@ -214,7 +218,9 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
 
     it('V4 between-numeric: numeric BETWEEN supported -> TRUE (1000 in [500, 1500])', () => {
       const expression: RuleBasedFilterExpression = {
-        rules: [{ field: 'currentPrice', operator: 'BETWEEN', value: [500, 1500] }],
+        rules: [
+          { field: 'currentPrice', operator: 'BETWEEN', value: [500, 1500] },
+        ],
       };
 
       const result = service.evaluateFilterExpression(expression, article);

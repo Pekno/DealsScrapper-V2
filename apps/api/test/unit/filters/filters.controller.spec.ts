@@ -58,7 +58,12 @@ describe('FiltersController - Filter Management API', () => {
     filterExpression: {
       rules: [
         { field: 'currentPrice', operator: '<=', value: 500 },
-        { field: 'title', operator: 'CONTAINS', value: 'gaming', caseSensitive: false },
+        {
+          field: 'title',
+          operator: 'CONTAINS',
+          value: 'gaming',
+          caseSensitive: false,
+        },
       ],
       matchLogic: 'AND',
     },
@@ -172,7 +177,7 @@ describe('FiltersController - Filter Management API', () => {
       // Act
       const result = await controller.create(
         mockAuthenticatedRequest as AuthenticatedRequest,
-        createFilterDto,
+        createFilterDto
       );
 
       // Assert
@@ -180,7 +185,10 @@ describe('FiltersController - Filter Management API', () => {
       expect(result.message).toBe('Filter created successfully');
       expect(result.data!.id).toBe('filter-1');
       expect(result.data!.name).toBe('Gaming Deals');
-      expect(mockFiltersService.create).toHaveBeenCalledWith('user-1', createFilterDto);
+      expect(mockFiltersService.create).toHaveBeenCalledWith(
+        'user-1',
+        createFilterDto
+      );
     });
 
     it('should propagate service errors', async () => {
@@ -193,11 +201,16 @@ describe('FiltersController - Filter Management API', () => {
           matchLogic: 'AND',
         },
       };
-      mockFiltersService.create.mockRejectedValue(new Error('Category not found'));
+      mockFiltersService.create.mockRejectedValue(
+        new Error('Category not found')
+      );
 
       // Act & Assert
       await expect(
-        controller.create(mockAuthenticatedRequest as AuthenticatedRequest, createFilterDto),
+        controller.create(
+          mockAuthenticatedRequest as AuthenticatedRequest,
+          createFilterDto
+        )
       ).rejects.toThrow('Category not found');
     });
   });
@@ -211,7 +224,7 @@ describe('FiltersController - Filter Management API', () => {
       // Act
       const result = await controller.findAll(
         mockAuthenticatedRequest as AuthenticatedRequest,
-        query,
+        query
       );
 
       // Assert
@@ -235,7 +248,10 @@ describe('FiltersController - Filter Management API', () => {
       mockFiltersService.findAll.mockResolvedValue(mockFilterListResponse);
 
       // Act
-      await controller.findAll(mockAuthenticatedRequest as AuthenticatedRequest, query);
+      await controller.findAll(
+        mockAuthenticatedRequest as AuthenticatedRequest,
+        query
+      );
 
       // Assert
       expect(mockFiltersService.findAll).toHaveBeenCalledWith('user-1', query);
@@ -249,7 +265,7 @@ describe('FiltersController - Filter Management API', () => {
 
       // Act
       const result = await controller.getFiltersCount(
-        mockAuthenticatedRequest as AuthenticatedRequest,
+        mockAuthenticatedRequest as AuthenticatedRequest
       );
 
       // Assert
@@ -268,25 +284,31 @@ describe('FiltersController - Filter Management API', () => {
       // Act
       const result = await controller.findOne(
         mockAuthenticatedRequest as AuthenticatedRequest,
-        'filter-1',
+        'filter-1'
       );
 
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Filter retrieved successfully');
       expect(result.data!.id).toBe('filter-1');
-      expect(mockFiltersService.findOne).toHaveBeenCalledWith('user-1', 'filter-1');
+      expect(mockFiltersService.findOne).toHaveBeenCalledWith(
+        'user-1',
+        'filter-1'
+      );
     });
 
     it('should propagate NotFoundException', async () => {
       // Arrange
       mockFiltersService.findOne.mockRejectedValue(
-        new NotFoundException('Filter with ID nonexistent not found'),
+        new NotFoundException('Filter with ID nonexistent not found')
       );
 
       // Act & Assert
       await expect(
-        controller.findOne(mockAuthenticatedRequest as AuthenticatedRequest, 'nonexistent'),
+        controller.findOne(
+          mockAuthenticatedRequest as AuthenticatedRequest,
+          'nonexistent'
+        )
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -298,27 +320,35 @@ describe('FiltersController - Filter Management API', () => {
         name: 'Updated Gaming Deals',
         active: false,
       };
-      const updatedFilter = { ...mockFilterResponse, name: 'Updated Gaming Deals', active: false };
+      const updatedFilter = {
+        ...mockFilterResponse,
+        name: 'Updated Gaming Deals',
+        active: false,
+      };
       mockFiltersService.update.mockResolvedValue(updatedFilter);
 
       // Act
       const result = await controller.update(
         mockAuthenticatedRequest as AuthenticatedRequest,
         'filter-1',
-        updateFilterDto,
+        updateFilterDto
       );
 
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Filter updated successfully');
       expect(result.data!.name).toBe('Updated Gaming Deals');
-      expect(mockFiltersService.update).toHaveBeenCalledWith('user-1', 'filter-1', updateFilterDto);
+      expect(mockFiltersService.update).toHaveBeenCalledWith(
+        'user-1',
+        'filter-1',
+        updateFilterDto
+      );
     });
 
     it('should propagate NotFoundException', async () => {
       // Arrange
       mockFiltersService.update.mockRejectedValue(
-        new NotFoundException('Filter not found'),
+        new NotFoundException('Filter not found')
       );
 
       // Act & Assert
@@ -326,8 +356,8 @@ describe('FiltersController - Filter Management API', () => {
         controller.update(
           mockAuthenticatedRequest as AuthenticatedRequest,
           'nonexistent',
-          { name: 'Test' },
-        ),
+          { name: 'Test' }
+        )
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -340,25 +370,31 @@ describe('FiltersController - Filter Management API', () => {
       // Act
       const result = await controller.remove(
         mockAuthenticatedRequest as AuthenticatedRequest,
-        'filter-1',
+        'filter-1'
       );
 
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Filter deleted successfully');
       expect(result.data).toBeNull();
-      expect(mockFiltersService.remove).toHaveBeenCalledWith('user-1', 'filter-1');
+      expect(mockFiltersService.remove).toHaveBeenCalledWith(
+        'user-1',
+        'filter-1'
+      );
     });
 
     it('should propagate NotFoundException', async () => {
       // Arrange
       mockFiltersService.remove.mockRejectedValue(
-        new NotFoundException('Filter not found'),
+        new NotFoundException('Filter not found')
       );
 
       // Act & Assert
       await expect(
-        controller.remove(mockAuthenticatedRequest as AuthenticatedRequest, 'nonexistent'),
+        controller.remove(
+          mockAuthenticatedRequest as AuthenticatedRequest,
+          'nonexistent'
+        )
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -372,14 +408,17 @@ describe('FiltersController - Filter Management API', () => {
       // Act
       const result = await controller.toggleActive(
         mockAuthenticatedRequest as AuthenticatedRequest,
-        'filter-1',
+        'filter-1'
       );
 
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Filter status toggled successfully');
       expect(result.data!.active).toBe(false);
-      expect(mockFiltersService.toggleActive).toHaveBeenCalledWith('user-1', 'filter-1');
+      expect(mockFiltersService.toggleActive).toHaveBeenCalledWith(
+        'user-1',
+        'filter-1'
+      );
     });
   });
 
@@ -393,7 +432,7 @@ describe('FiltersController - Filter Management API', () => {
         mockAuthenticatedRequest as AuthenticatedRequest,
         'filter-1',
         '1',
-        '20',
+        '20'
       );
 
       // Assert
@@ -408,7 +447,7 @@ describe('FiltersController - Filter Management API', () => {
         20,
         undefined,
         undefined,
-        undefined,
+        undefined
       );
     });
 
@@ -424,7 +463,7 @@ describe('FiltersController - Filter Management API', () => {
         '20',
         'gaming',
         'score',
-        'desc',
+        'desc'
       );
 
       // Assert
@@ -435,7 +474,7 @@ describe('FiltersController - Filter Management API', () => {
         20,
         'gaming',
         'score',
-        'desc',
+        'desc'
       );
     });
   });
@@ -448,7 +487,7 @@ describe('FiltersController - Filter Management API', () => {
       // Act
       const result = await controller.getStats(
         mockAuthenticatedRequest as AuthenticatedRequest,
-        'filter-1',
+        'filter-1'
       );
 
       // Assert
@@ -457,7 +496,10 @@ describe('FiltersController - Filter Management API', () => {
       expect(result.data!.totalMatches).toBe(25);
       expect(result.data!.matchesLast24h).toBe(5);
       expect(result.data!.avgScore).toBe(75);
-      expect(mockFiltersService.getFilterStats).toHaveBeenCalledWith('user-1', 'filter-1');
+      expect(mockFiltersService.getFilterStats).toHaveBeenCalledWith(
+        'user-1',
+        'filter-1'
+      );
     });
   });
 
@@ -487,12 +529,14 @@ describe('FiltersController - Filter Management API', () => {
         ],
         nextScrapingAt: new Date('2025-01-16T10:00:00Z'),
       };
-      mockFiltersService.getScrapingStatus.mockResolvedValue(mockScrapingStatus);
+      mockFiltersService.getScrapingStatus.mockResolvedValue(
+        mockScrapingStatus
+      );
 
       // Act
       const result = await controller.getScrapingStatus(
         mockAuthenticatedRequest as AuthenticatedRequest,
-        'filter-1',
+        'filter-1'
       );
 
       // Assert
@@ -501,7 +545,10 @@ describe('FiltersController - Filter Management API', () => {
       expect(result.data!.categories).toHaveLength(1);
       expect(result.data!.categories[0].categoryName).toBe('PC Gaming');
       expect(result.data!.nextScrapingAt).toBeDefined();
-      expect(mockFiltersService.getScrapingStatus).toHaveBeenCalledWith('user-1', 'filter-1');
+      expect(mockFiltersService.getScrapingStatus).toHaveBeenCalledWith(
+        'user-1',
+        'filter-1'
+      );
     });
   });
 });

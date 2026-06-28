@@ -190,8 +190,12 @@ describe('Smart Deal Hunting Workflows', () => {
 
       const filters = filtersResponse.body.data.filters;
       expect(filters).toHaveLength(2);
-      expect(filters.some((f: { name: string }) => f.name.includes('Gaming'))).toBe(true);
-      expect(filters.some((f: { name: string }) => f.name.includes('Premium Tech'))).toBe(true);
+      expect(
+        filters.some((f: { name: string }) => f.name.includes('Gaming'))
+      ).toBe(true);
+      expect(
+        filters.some((f: { name: string }) => f.name.includes('Premium Tech'))
+      ).toBe(true);
     });
 
     it('allows users to pause filters when they want to reduce notifications', async () => {
@@ -276,8 +280,12 @@ describe('Smart Deal Hunting Workflows', () => {
 
       const categories = categoriesResponse.body.data;
       expect(categories.length).toBeGreaterThanOrEqual(2);
-      expect(categories.some((c: { name: string }) => c.name === 'Gaming Laptops')).toBe(true);
-      expect(categories.some((c: { name: string }) => c.name === 'Smartphones')).toBe(true);
+      expect(
+        categories.some((c: { name: string }) => c.name === 'Gaming Laptops')
+      ).toBe(true);
+      expect(
+        categories.some((c: { name: string }) => c.name === 'Smartphones')
+      ).toBe(true);
     });
   });
 

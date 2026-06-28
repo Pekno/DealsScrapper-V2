@@ -9,10 +9,7 @@ import {
   LogicalOperator,
   FilterableField,
 } from '@dealscrapper/shared-types';
-import {
-  ArticleWrapper,
-  SiteSource,
-} from '@dealscrapper/shared-types/article';
+import { ArticleWrapper, SiteSource } from '@dealscrapper/shared-types/article';
 import { createServiceLogger } from '@dealscrapper/shared-logging';
 import { apiLogConfig } from '../../config/logging.config.js';
 import { parseFilterExpression } from '../utils/filter-expression.utils.js';
@@ -41,7 +38,7 @@ export class FilterMatcherService {
    */
   async matchArticle(article: ArticleWrapper): Promise<Filter[]> {
     this.logger.debug(
-      `Finding matching filters for article: ${article.base.id} (source: ${article.source})`,
+      `Finding matching filters for article: ${article.base.id} (source: ${article.source})`
     );
 
     // Only fetch filters that:
@@ -73,7 +70,7 @@ export class FilterMatcherService {
     });
 
     this.logger.debug(
-      `Found ${filters.length} active filters for site: ${article.source}`,
+      `Found ${filters.length} active filters for site: ${article.source}`
     );
 
     // Evaluate each filter's expression against the article
@@ -83,7 +80,9 @@ export class FilterMatcherService {
       try {
         const expression = parseFilterExpression(filter.filterExpression);
         if (!expression) {
-          this.logger.warn(`Invalid filter expression for filter "${filter.name}" (${filter.id})`);
+          this.logger.warn(
+            `Invalid filter expression for filter "${filter.name}" (${filter.id})`
+          );
           continue;
         }
         const matches = this.evaluateFilterExpression(expression, article);
@@ -95,13 +94,13 @@ export class FilterMatcherService {
       } catch (error) {
         this.logger.error(
           `Error evaluating filter "${filter.name}" (${filter.id}): ${error.message}`,
-          error.stack,
+          error.stack
         );
       }
     }
 
     this.logger.log(
-      `Article ${article.base.id} matched ${matchingFilters.length} filters`,
+      `Article ${article.base.id} matched ${matchingFilters.length} filters`
     );
 
     return matchingFilters;
@@ -116,7 +115,7 @@ export class FilterMatcherService {
    */
   evaluateFilterExpression(
     expression: RuleBasedFilterExpression,
-    article: ArticleWrapper,
+    article: ArticleWrapper
   ): boolean {
     const { rules, matchLogic = 'AND', minScore, scoreMode } = expression;
 
@@ -127,18 +126,24 @@ export class FilterMatcherService {
 
     // If scoring is enabled, calculate score
     if (minScore !== undefined && minScore > 0) {
-      const score = this.calculateScore(rules, article, scoreMode ?? 'weighted');
+      const score = this.calculateScore(
+        rules,
+        article,
+        scoreMode ?? 'weighted'
+      );
       const matches = score >= minScore;
 
       this.logger.debug(
-        `Score-based evaluation: ${score} (min: ${minScore}, mode: ${scoreMode}) -> ${matches}`,
+        `Score-based evaluation: ${score} (min: ${minScore}, mode: ${scoreMode}) -> ${matches}`
       );
 
       return matches;
     }
 
     // Boolean evaluation based on matchLogic
-    const results = rules.map((rule) => this.evaluateRuleOrGroup(rule, article));
+    const results = rules.map((rule) =>
+      this.evaluateRuleOrGroup(rule, article)
+    );
 
     if (matchLogic === 'AND') {
       return results.every((r) => r);
@@ -159,7 +164,7 @@ export class FilterMatcherService {
    */
   private evaluateRuleOrGroup(
     ruleOrGroup: FilterRule | FilterRuleGroup,
-    article: ArticleWrapper,
+    article: ArticleWrapper
   ): boolean {
     // Check if this is a rule group (has 'logic' property)
     if ('logic' in ruleOrGroup) {
@@ -185,10 +190,11 @@ export class FilterMatcherService {
   evaluateRule(rule: FilterRule, article: ArticleWrapper): boolean {
     // Site-specific rule handling
     // Check if rule has siteSpecific property (it's optional in the interface)
-    const siteSpecific = (rule as FilterRule & { siteSpecific?: string }).siteSpecific;
+    const siteSpecific = (rule as FilterRule & { siteSpecific?: string })
+      .siteSpecific;
     if (siteSpecific && siteSpecific !== article.source) {
       this.logger.debug(
-        `Skipping site-specific rule for field "${rule.field}" (siteSpecific: ${siteSpecific}, article.source: ${article.source})`,
+        `Skipping site-specific rule for field "${rule.field}" (siteSpecific: ${siteSpecific}, article.source: ${article.source})`
       );
       return true; // Skip the rule (don't fail the match)
     }
@@ -201,11 +207,11 @@ export class FilterMatcherService {
       rule.operator,
       fieldValue,
       rule.value,
-      rule.caseSensitive ?? false,
+      rule.caseSensitive ?? false
     );
 
     this.logger.debug(
-      `Rule evaluation: field="${rule.field}", operator="${rule.operator}", value="${fieldValue}" vs "${rule.value}" -> ${matches}`,
+      `Rule evaluation: field="${rule.field}", operator="${rule.operator}", value="${fieldValue}" vs "${rule.value}" -> ${matches}`
     );
 
     return matches;
@@ -218,17 +224,16 @@ export class FilterMatcherService {
    * @param article - ArticleWrapper to evaluate against
    * @returns true if the group matches
    */
-  evaluateRuleGroup(
-    group: FilterRuleGroup,
-    article: ArticleWrapper,
-  ): boolean {
+  evaluateRuleGroup(group: FilterRuleGroup, article: ArticleWrapper): boolean {
     const { logic, rules } = group;
 
     if (!rules || rules.length === 0) {
       return true; // Empty group matches
     }
 
-    const results = rules.map((rule) => this.evaluateRuleOrGroup(rule, article));
+    const results = rules.map((rule) =>
+      this.evaluateRuleOrGroup(rule, article)
+    );
 
     switch (logic) {
       case 'AND':
@@ -253,7 +258,7 @@ export class FilterMatcherService {
    */
   private getFieldValue(
     article: ArticleWrapper,
-    field: FilterableField,
+    field: FilterableField
   ): string | number | boolean | Date | string[] | number[] | null {
     // Check base article fields first
     if (field in article.base) {
@@ -307,19 +312,31 @@ export class FilterMatcherService {
       case 'availability':
         // Alias for stockLevel (Dealabs only)
         if (article.isDealabs() && 'stockLevel' in article.extension) {
-          return (article.extension as typeof article.extension & { stockLevel: string | null }).stockLevel;
+          return (
+            article.extension as typeof article.extension & {
+              stockLevel: string | null;
+            }
+          ).stockLevel;
         }
         return null;
       case 'rating':
         // Alias for merchantRating (Dealabs only)
         if (article.isDealabs() && 'merchantRating' in article.extension) {
-          return (article.extension as typeof article.extension & { merchantRating: number | null }).merchantRating;
+          return (
+            article.extension as typeof article.extension & {
+              merchantRating: number | null;
+            }
+          ).merchantRating;
         }
         return null;
       case 'specs':
         // Alias for metadata (Dealabs only)
         if (article.isDealabs() && 'metadata' in article.extension) {
-          return (article.extension as typeof article.extension & { metadata: unknown }).metadata as null; // JSON field
+          return (
+            article.extension as typeof article.extension & {
+              metadata: unknown;
+            }
+          ).metadata as null; // JSON field
         }
         return null;
       default:
@@ -345,8 +362,15 @@ export class FilterMatcherService {
   private evaluateOperator(
     operator: FilterOperator,
     fieldValue: string | number | boolean | Date | string[] | number[] | null,
-    compareValue: string | number | boolean | string[] | number[] | Date | Date[],
-    caseSensitive: boolean,
+    compareValue:
+      | string
+      | number
+      | boolean
+      | string[]
+      | number[]
+      | Date
+      | Date[],
+    caseSensitive: boolean
   ): boolean {
     // Handle null field values. Converged with the scraper's live engine
     // (RuleEngineService.evaluateNullFieldValue): an absent field "is not" any
@@ -426,7 +450,7 @@ export class FilterMatcherService {
         } catch (error) {
           this.logger.error(
             `Invalid regex pattern: ${compareValue}`,
-            error.stack,
+            error.stack
           );
           return false;
         }
@@ -452,11 +476,13 @@ export class FilterMatcherService {
           return false;
         }
         if (caseSensitive) {
-          return (compareValue as (string | number)[]).includes(fieldValue as string | number);
+          return (compareValue as (string | number)[]).includes(
+            fieldValue as string | number
+          );
         } else {
           const lowerField = String(fieldValue).toLowerCase();
           return (compareValue as (string | number)[]).some(
-            (v: string | number) => String(v).toLowerCase() === lowerField,
+            (v: string | number) => String(v).toLowerCase() === lowerField
           );
         }
       }
@@ -465,11 +491,13 @@ export class FilterMatcherService {
           return false;
         }
         if (caseSensitive) {
-          return !(compareValue as (string | number)[]).includes(fieldValue as string | number);
+          return !(compareValue as (string | number)[]).includes(
+            fieldValue as string | number
+          );
         } else {
           const lowerField = String(fieldValue).toLowerCase();
           return !(compareValue as (string | number)[]).some(
-            (v: string | number) => String(v).toLowerCase() === lowerField,
+            (v: string | number) => String(v).toLowerCase() === lowerField
           );
         }
       }
@@ -478,13 +506,17 @@ export class FilterMatcherService {
           return false;
         }
         if (caseSensitive) {
-          return (compareValue as (string | number)[]).some((v: string | number) => (fieldValue as (string | number)[]).includes(v));
-        } else {
-          const lowerFieldArray = (fieldValue as (string | number)[]).map((v: string | number) =>
-            String(v).toLowerCase(),
+          return (compareValue as (string | number)[]).some(
+            (v: string | number) =>
+              (fieldValue as (string | number)[]).includes(v)
           );
-          return (compareValue as (string | number)[]).some((v: string | number) =>
-            lowerFieldArray.includes(String(v).toLowerCase()),
+        } else {
+          const lowerFieldArray = (fieldValue as (string | number)[]).map(
+            (v: string | number) => String(v).toLowerCase()
+          );
+          return (compareValue as (string | number)[]).some(
+            (v: string | number) =>
+              lowerFieldArray.includes(String(v).toLowerCase())
           );
         }
       }
@@ -493,13 +525,17 @@ export class FilterMatcherService {
           return false;
         }
         if (caseSensitive) {
-          return (compareValue as (string | number)[]).every((v: string | number) => (fieldValue as (string | number)[]).includes(v));
-        } else {
-          const lowerFieldArray = (fieldValue as (string | number)[]).map((v: string | number) =>
-            String(v).toLowerCase(),
+          return (compareValue as (string | number)[]).every(
+            (v: string | number) =>
+              (fieldValue as (string | number)[]).includes(v)
           );
-          return (compareValue as (string | number)[]).every((v: string | number) =>
-            lowerFieldArray.includes(String(v).toLowerCase()),
+        } else {
+          const lowerFieldArray = (fieldValue as (string | number)[]).map(
+            (v: string | number) => String(v).toLowerCase()
+          );
+          return (compareValue as (string | number)[]).every(
+            (v: string | number) =>
+              lowerFieldArray.includes(String(v).toLowerCase())
           );
         }
       }
@@ -508,13 +544,17 @@ export class FilterMatcherService {
           return false;
         }
         if (caseSensitive) {
-          return !(compareValue as (string | number)[]).some((v: string | number) => (fieldValue as (string | number)[]).includes(v));
-        } else {
-          const lowerFieldArray = (fieldValue as (string | number)[]).map((v: string | number) =>
-            String(v).toLowerCase(),
+          return !(compareValue as (string | number)[]).some(
+            (v: string | number) =>
+              (fieldValue as (string | number)[]).includes(v)
           );
-          return !(compareValue as (string | number)[]).some((v: string | number) =>
-            lowerFieldArray.includes(String(v).toLowerCase()),
+        } else {
+          const lowerFieldArray = (fieldValue as (string | number)[]).map(
+            (v: string | number) => String(v).toLowerCase()
+          );
+          return !(compareValue as (string | number)[]).some(
+            (v: string | number) =>
+              lowerFieldArray.includes(String(v).toLowerCase())
           );
         }
       }
@@ -558,26 +598,22 @@ export class FilterMatcherService {
       }
       case 'OLDER_THAN': {
         // compareValue is number of hours
-        if (
-          !(fieldValue instanceof Date) ||
-          typeof compareValue !== 'number'
-        ) {
+        if (!(fieldValue instanceof Date) || typeof compareValue !== 'number') {
           return false;
         }
         const now = new Date();
-        const ageHours = (now.getTime() - fieldValue.getTime()) / (1000 * 60 * 60);
+        const ageHours =
+          (now.getTime() - fieldValue.getTime()) / (1000 * 60 * 60);
         return ageHours > compareValue;
       }
       case 'NEWER_THAN': {
         // compareValue is number of hours
-        if (
-          !(fieldValue instanceof Date) ||
-          typeof compareValue !== 'number'
-        ) {
+        if (!(fieldValue instanceof Date) || typeof compareValue !== 'number') {
           return false;
         }
         const now = new Date();
-        const ageHours = (now.getTime() - fieldValue.getTime()) / (1000 * 60 * 60);
+        const ageHours =
+          (now.getTime() - fieldValue.getTime()) / (1000 * 60 * 60);
         return ageHours < compareValue;
       }
 
@@ -598,7 +634,7 @@ export class FilterMatcherService {
   private calculateScore(
     rules: (FilterRule | FilterRuleGroup)[],
     article: ArticleWrapper,
-    scoreMode: 'weighted' | 'percentage' | 'points',
+    scoreMode: 'weighted' | 'percentage' | 'points'
   ): number {
     let totalWeight = 0;
     let earnedWeight = 0;

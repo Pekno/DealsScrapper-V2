@@ -28,7 +28,12 @@ function getSiteDefaults(siteId: string): {
 } {
   const siteConfigs: Record<
     string,
-    { name: string; baseUrl: string; categoryDiscoveryUrl: string; color: string }
+    {
+      name: string;
+      baseUrl: string;
+      categoryDiscoveryUrl: string;
+      color: string;
+    }
   > = {
     dealabs: {
       name: 'Dealabs',

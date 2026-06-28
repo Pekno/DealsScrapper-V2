@@ -73,7 +73,10 @@ export class CategoriesController {
   ): Promise<StandardApiResponse<CategoryDto[]>> {
     // Parse comma-separated site IDs into array
     const siteIds = siteId
-      ? siteId.split(',').map((s) => s.trim()).filter(Boolean)
+      ? siteId
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
       : undefined;
     const categories = await this.categoriesService.findAll(find, siteIds);
     return createSuccessResponse(
@@ -128,9 +131,14 @@ export class CategoriesController {
       },
     },
   })
-  async refreshCategories(
-    @CurrentUser() user: { id: string }
-  ): Promise<StandardApiResponse<{ jobId: string; message: string; queuedAt: string; triggeredBy: string }>> {
+  async refreshCategories(@CurrentUser() user: { id: string }): Promise<
+    StandardApiResponse<{
+      jobId: string;
+      message: string;
+      queuedAt: string;
+      triggeredBy: string;
+    }>
+  > {
     const result = await this.categoriesService.triggerCategoryDiscovery(
       user.id
     );

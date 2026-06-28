@@ -125,14 +125,16 @@ export class ApiHealthService extends BaseHealthService {
     try {
       // If JwtService is not available, report as degraded
       if (!this.jwtService) {
-        this.logger.warn('JwtService not available for authentication health check');
+        this.logger.warn(
+          'JwtService not available for authentication health check'
+        );
         return 'degraded';
       }
 
       // Test JWT functionality
       const testPayload = { test: true, iat: Math.floor(Date.now() / 1000) };
       const token = this.jwtService.sign(testPayload);
-      const decoded = this.jwtService.verify(token) as JwtPayload;
+      const decoded = this.jwtService.verify(token);
 
       if (!decoded || !decoded.test) {
         return 'unhealthy';

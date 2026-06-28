@@ -291,19 +291,22 @@ export class ArticleResponseDto {
   source: SiteSource;
 
   @ApiPropertyOptional({
-    description: 'Dealabs-specific extension data (only present for Dealabs articles)',
+    description:
+      'Dealabs-specific extension data (only present for Dealabs articles)',
     type: DealabsExtensionDto,
   })
   dealabsExtension?: DealabsExtensionDto;
 
   @ApiPropertyOptional({
-    description: 'Vinted-specific extension data (only present for Vinted articles)',
+    description:
+      'Vinted-specific extension data (only present for Vinted articles)',
     type: VintedExtensionDto,
   })
   vintedExtension?: VintedExtensionDto;
 
   @ApiPropertyOptional({
-    description: 'LeBonCoin-specific extension data (only present for LeBonCoin articles)',
+    description:
+      'LeBonCoin-specific extension data (only present for LeBonCoin articles)',
     type: LeBonCoinExtensionDto,
   })
   leboncoinExtension?: LeBonCoinExtensionDto;

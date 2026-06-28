@@ -43,6 +43,11 @@ import { PrismaModule } from '@dealscrapper/database';
     LocalStrategy,
   ],
   controllers: [AuthController],
-  exports: [AuthService, EmailVerificationService, PasswordResetService, JwtModule],
+  exports: [
+    AuthService,
+    EmailVerificationService,
+    PasswordResetService,
+    JwtModule,
+  ],
 })
 export class AuthModule {}

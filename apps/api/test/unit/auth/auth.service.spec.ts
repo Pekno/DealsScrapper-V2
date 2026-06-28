@@ -246,7 +246,9 @@ describe('AuthService - User Security & Account Management', () => {
       expect(result.data!.user.email).toBe('test@example.com');
       expect(result.data!.user.firstName).toBe('John');
       expect(result.data!.user.lastName).toBe('Doe');
-      expect((result.data!.user as Record<string, unknown>).password).toBeUndefined(); // Security: No password exposure
+      expect(
+        (result.data!.user as Record<string, unknown>).password
+      ).toBeUndefined(); // Security: No password exposure
       expect(result.data!.user.role).toBe('USER'); // Role included in response
     });
   });
@@ -260,7 +262,11 @@ describe('AuthService - User Security & Account Management', () => {
     });
 
     it('should enable new users to create secure accounts with immediate access', async () => {
-      const newUser = { ...mockUser, emailVerified: false, emailVerifiedAt: null };
+      const newUser = {
+        ...mockUser,
+        emailVerified: false,
+        emailVerifiedAt: null,
+      };
       mockUsersService.create.mockResolvedValue(newUser);
 
       const result = await service.register(
@@ -346,7 +352,9 @@ describe('AuthService - User Security & Account Management', () => {
             password: expect.any(String),
           })
         );
-        expect(mockEmailVerificationService.sendVerificationEmail).toHaveBeenCalledWith(
+        expect(
+          mockEmailVerificationService.sendVerificationEmail
+        ).toHaveBeenCalledWith(
           existingUnverifiedUser.id,
           existingUnverifiedUser.email
         );
@@ -369,7 +377,9 @@ describe('AuthService - User Security & Account Management', () => {
         ).rejects.toThrow(ConflictException);
 
         expect(mockUsersService.update).not.toHaveBeenCalled();
-        expect(mockEmailVerificationService.sendVerificationEmail).not.toHaveBeenCalled();
+        expect(
+          mockEmailVerificationService.sendVerificationEmail
+        ).not.toHaveBeenCalled();
       });
 
       it('should update password on re-registration', async () => {
@@ -389,9 +399,12 @@ describe('AuthService - User Security & Account Management', () => {
         await service.register('test@example.com', 'NewPassword123');
 
         expect(mockUsersService.update).toHaveBeenCalled();
-        const updateCall = (mockUsersService.update as jest.Mock).mock.calls[0][1];
+        const updateCall = mockUsersService.update.mock.calls[0][1];
         expect(updateCall.password).toBe('hashedPassword');
-        expect(mockBcryptjs.hash).toHaveBeenCalledWith('NewPassword123', expect.any(Number));
+        expect(mockBcryptjs.hash).toHaveBeenCalledWith(
+          'NewPassword123',
+          expect.any(Number)
+        );
       });
 
       it('should keep existing names if not provided during re-registration', async () => {

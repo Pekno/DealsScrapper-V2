@@ -4,10 +4,7 @@ import {
   ValidateSiteSpecificFields,
   validateFilterRules,
 } from '../../../src/filters/validation/validate-site-fields.decorator.js';
-import type {
-  FilterRule,
-  FilterRuleGroup,
-} from '@dealscrapper/shared-types';
+import type { FilterRule, FilterRuleGroup } from '@dealscrapper/shared-types';
 
 /**
  * Test DTO that uses the ValidateSiteSpecificFields decorator

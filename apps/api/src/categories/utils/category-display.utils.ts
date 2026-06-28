@@ -40,7 +40,7 @@ export function buildCategoryDisplayPath(category: CategoryWithParent): string {
 export function isCategorySelectable(
   dbIsSelectable: boolean | undefined,
   level: number,
-  siteId: string,
+  siteId: string
 ): boolean {
   if (dbIsSelectable !== undefined) {
     return dbIsSelectable;

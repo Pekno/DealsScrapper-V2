@@ -135,7 +135,10 @@ describe('FiltersService - User Deal Discovery & Personalization', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FiltersService,
-        { provide: PrismaService, useValue: mockPrismaService as unknown as PrismaService },
+        {
+          provide: PrismaService,
+          useValue: mockPrismaService as unknown as PrismaService,
+        },
         { provide: HttpService, useValue: mockHttpService },
         { provide: SharedConfigService, useValue: mockSharedConfigService },
         { provide: FilterMatcherService, useValue: mockFilterMatcherService },
@@ -143,7 +146,7 @@ describe('FiltersService - User Deal Discovery & Personalization', () => {
     }).compile();
 
     service = module.get<FiltersService>(FiltersService);
-    prisma = module.get(PrismaService) as unknown as MockedPrismaService;
+    prisma = module.get(PrismaService);
     httpService = module.get(HttpService);
     sharedConfigService = module.get(SharedConfigService);
 

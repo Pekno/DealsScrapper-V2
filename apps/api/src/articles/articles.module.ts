@@ -10,8 +10,7 @@ const DEFAULT_ELASTICSEARCH_URL = 'http://localhost:9200';
     ElasticsearchModule.registerAsync({
       useFactory: () => {
         const elasticsearchUrl =
-          process.env.ELASTICSEARCH_NODE ??
-          DEFAULT_ELASTICSEARCH_URL;
+          process.env.ELASTICSEARCH_NODE ?? DEFAULT_ELASTICSEARCH_URL;
 
         return {
           node: elasticsearchUrl,
