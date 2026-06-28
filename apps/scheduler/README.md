@@ -10,7 +10,6 @@ The Scheduler Service is the **central orchestrator** of DealsScapper's distribu
 - **Job Distribution** - Routes jobs to isolated per-site queues (Dealabs, Vinted, LeBonCoin)
 - **Worker Health Monitoring** - Tracks worker registration, heartbeats, and automatic failover
 - **Category Discovery** - Orchestrates discovery of new deal categories across the worker pool
-- **Category Sync** - Daily synchronization of category metadata across all sites
 
 ## Architecture
 
@@ -60,8 +59,6 @@ apps/scheduler/
 │   ├── scheduled-job/           # ScheduledJob lifecycle & reference counting
 │   ├── worker-health/           # Worker registration, heartbeats, health checks
 │   ├── category-discovery/      # Orchestrates daily/manual category discovery
-│   ├── category-sync/           # Daily category metadata synchronization
-│   ├── repositories/            # Category & ScheduledJob data access layer
 │   ├── health/                  # Custom health endpoint with worker pool checks
 │   ├── config/                  # Logging configuration
 │   ├── types/                   # TypeScript type definitions
@@ -176,24 +173,6 @@ Orchestrates category discovery by distributing discovery jobs to site-specific 
 
 ---
 
-### CategorySyncService (`category-sync/category-sync.service.ts`)
-
-Daily category metadata synchronization service. Coordinates with the scraper service to discover and upsert categories in the database.
-
-**Key behaviors:**
-- `@Cron('0 3 * * *')`: runs at 3 AM, syncs all sites in parallel via `Promise.allSettled`
-- `syncSiteCategories()`: calls scraper service for category metadata, then upserts each category
-- Upsert uses composite key `[siteId, sourceUrl]`; preserves existing metrics (dealCount, userCount, popularBrands)
-- Resolves parent-child relationships via slug lookup during upsert
-- `triggerManualSync()`: API endpoint for admin/testing
-- `getSyncStatus()`: returns category counts by site and last sync timestamp
-
-**Note:** Currently, actual HTTP-based discovery from the scraper is a placeholder (returns empty array) since discovery is handled asynchronously via `CategoryDiscoveryOrchestrator` job queue. This module is not yet wired into the main `SchedulerModule`.
-
-**Depends on:** `PrismaService`, `HttpService`
-
----
-
 ### SchedulerHealthService (`health/scheduler-health.service.ts`)
 
 Custom health endpoint extending `BaseHealthService` from `@dealscrapper/shared-health`. Adds worker pool health monitoring to the standard `/health` response.
@@ -205,14 +184,6 @@ Custom health endpoint extending `BaseHealthService` from `@dealscrapper/shared-
 - `/health` response includes detailed worker info: per-worker ID, endpoint, site, status, load, capacity, last heartbeat
 
 **Depends on:** `WorkerHealthService`, `SharedConfigService`
-
----
-
-### Repositories (`repositories/`)
-
-**CategoryModelRepository** (`category.repository.ts`): Extends `BaseCategoryRepository` with scheduler-specific queries: categories with filters, categories without scheduled jobs, popular categories, scheduling metrics dashboard. Default includes: `scheduledJob` and active `filters`.
-
-**ScheduledJobRepository** (`scheduled-job.repository.ts`): Full CRUD + specialized queries: jobs due for execution, jobs by filter count range, low success rate detection, high execution frequency tracking, comprehensive statistics, and stale job cleanup.
 
 ---
 
