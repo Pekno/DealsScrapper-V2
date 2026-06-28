@@ -3,6 +3,7 @@ import { AuthService } from '../../../src/auth/auth.service';
 import { UsersService } from '../../../src/users/users.service';
 import { PrismaService } from '@dealscrapper/database';
 import type { User } from '@dealscrapper/database';
+import { Role } from '@dealscrapper/database';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { SharedConfigService } from '@dealscrapper/shared-config';
@@ -330,8 +331,8 @@ describe('Security Integration - User Protection & Account Safety', () => {
 
       // User Value: Successful authentication grants account access
       expect(result).toBeTruthy();
-      expect(result.id).toBe('user-1');
-      expect(result.email).toBe('test@example.com');
+      expect(result!.id).toBe('user-1');
+      expect(result!.email).toBe('test@example.com');
 
       // User Security: Failed attempt counter reset for clean state
     });
@@ -345,12 +346,14 @@ describe('Security Integration - User Protection & Account Safety', () => {
         firstName: 'John',
         lastName: 'Doe',
         emailVerified: false,
+        role: Role.USER,
         createdAt: mockUser.createdAt,
         updatedAt: mockUser.updatedAt,
         emailVerifiedAt: null,
         lastLoginAt: null,
         loginAttempts: 0,
         lockedUntil: null,
+        passwordChangedAt: null,
         timezone: 'UTC',
         locale: 'en',
         emailNotifications: true,
@@ -370,7 +373,7 @@ describe('Security Integration - User Protection & Account Safety', () => {
       });
 
       const result = await authService.login(
-        userWithoutPassword,
+        userWithoutPassword as User,
         '127.0.0.1',
         'test-agent'
       );
@@ -378,12 +381,12 @@ describe('Security Integration - User Protection & Account Safety', () => {
       // User Security: Secure tokens generated without sensitive data exposure
       expect(result.success).toBe(true);
       expect(result.message).toBe('Login successful');
-      expect(result.data.access_token).toBe('secure-jwt-token');
-      expect(result.data.refresh_token).toBeDefined();
-      expect(result.data.expires_in).toBe('15m');
+      expect(result.data!.access_token).toBe('secure-jwt-token');
+      expect(result.data!.refresh_token).toBeDefined();
+      expect(result.data!.expires_in).toBe('15m');
 
       // User Protection: Password never included in authentication response
-      expect(result.data.user).not.toHaveProperty('password');
+      expect(result.data!.user).not.toHaveProperty('password');
     });
 
     it('should enable users to maintain secure sessions without re-authentication', async () => {
@@ -471,7 +474,7 @@ describe('Security Integration - User Protection & Account Safety', () => {
       });
 
       await authService.login(
-        userWithoutPassword,
+        userWithoutPassword as User,
         '192.168.1.100',
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       );
