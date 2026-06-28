@@ -4,6 +4,7 @@ import { UsersService } from '../../../src/users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { SharedConfigService } from '@dealscrapper/shared-config';
 import { PrismaService, UserSession } from '@dealscrapper/database';
+import type { User } from '@dealscrapper/database';
 import { EmailVerificationService } from '../../../src/auth/services/email-verification.service';
 import {
   UnauthorizedException,
@@ -12,6 +13,20 @@ import {
 } from '@nestjs/common';
 import * as bcryptjs from 'bcryptjs';
 import { createMockUser } from '../../mocks/user.mock';
+
+interface MockedPrismaService {
+  user: {
+    findUnique: jest.Mock;
+    update: jest.Mock;
+    create: jest.Mock;
+  };
+  userSession: {
+    create: jest.Mock;
+    findUnique: jest.Mock;
+    deleteMany: jest.Mock;
+    findMany: jest.Mock;
+  };
+}
 
 // Mock bcryptjs at the module level
 jest.mock('bcryptjs', () => ({
@@ -24,9 +39,9 @@ describe('AuthService - Security Tests', () => {
   let usersService: jest.Mocked<UsersService>;
   let jwtService: jest.Mocked<JwtService>;
   let sharedConfigService: jest.Mocked<SharedConfigService>;
-  let prismaService: jest.Mocked<PrismaService>;
+  let prismaService: MockedPrismaService;
 
-  const mockUser = {
+  const mockUser: User = createMockUser({
     id: 'user-123',
     email: 'test@example.com',
     password: '$2a$12$hash', // bcrypt hash
@@ -36,10 +51,9 @@ describe('AuthService - Security Tests', () => {
     emailVerified: true,
     loginAttempts: 0,
     lockedUntil: null,
-    createdAt: new Date(),
     lastLoginAt: new Date(),
     passwordChangedAt: null,
-  };
+  });
 
   const createMockServices = () => ({
     usersService: {
@@ -87,7 +101,10 @@ describe('AuthService - Security Tests', () => {
         { provide: UsersService, useValue: mocks.usersService },
         { provide: JwtService, useValue: mocks.jwtService },
         { provide: SharedConfigService, useValue: mocks.sharedConfigService },
-        { provide: PrismaService, useValue: mocks.prismaService },
+        {
+          provide: PrismaService,
+          useValue: mocks.prismaService as unknown as PrismaService,
+        },
         {
           provide: EmailVerificationService,
           useValue: mocks.emailVerificationService,
@@ -99,7 +116,9 @@ describe('AuthService - Security Tests', () => {
     usersService = module.get(UsersService);
     jwtService = module.get(JwtService);
     sharedConfigService = module.get(SharedConfigService);
-    prismaService = module.get(PrismaService);
+    prismaService = module.get<PrismaService>(
+      PrismaService
+    ) as unknown as MockedPrismaService;
 
     // Setup default successful responses
     sharedConfigService.getJwtConfig.mockReturnValue({
@@ -110,7 +129,7 @@ describe('AuthService - Security Tests', () => {
     usersService.findByEmail.mockResolvedValue(null); // Default to no existing user
     prismaService.user.findUnique.mockResolvedValue(mockUser);
     prismaService.userSession.create.mockImplementation(
-      (data) =>
+      (data: { data: UserSession }) =>
         ({
           id: 'session-123',
           refreshToken: data.data.refreshToken, // Return the actual token passed to create
@@ -285,7 +304,7 @@ describe('AuthService - Security Tests', () => {
       );
 
       expect(result).toBeDefined();
-      expect(result.id).toBe('user-123');
+      expect(result!.id).toBe('user-123');
     });
 
     it('should reset login attempts on successful login', async () => {
@@ -363,7 +382,7 @@ describe('AuthService - Security Tests', () => {
           };
 
           const result = await service.login(testUser);
-          tokens.add(result.data.refresh_token);
+          tokens.add(result.data!.refresh_token);
         }
 
         // All tokens should be unique
@@ -403,7 +422,7 @@ describe('AuthService - Security Tests', () => {
           user: mockUser,
         };
         prismaService.userSession.findUnique.mockResolvedValue(
-          expiredSession as UserSession
+          expiredSession as unknown as UserSession
         );
 
         await expect(service.refreshToken('expired-token')).rejects.toThrow(
@@ -488,7 +507,7 @@ describe('AuthService - Security Tests', () => {
         user: mockUser,
       };
       prismaService.userSession.findUnique.mockResolvedValue(
-        validSession as UserSession
+        validSession as unknown as UserSession
       );
 
       const result = await service.refreshToken('valid-token');
@@ -515,8 +534,8 @@ describe('AuthService - Security Tests', () => {
 
       expect(result).toBeDefined();
       expect(result).not.toHaveProperty('password');
-      expect(result.id).toBe(mockUser.id);
-      expect(result.email).toBe(mockUser.email);
+      expect(result!.id).toBe(mockUser.id);
+      expect(result!.email).toBe(mockUser.email);
     });
 
     it('should not expose sensitive user data in login response', async () => {
@@ -524,10 +543,10 @@ describe('AuthService - Security Tests', () => {
 
       expect(result.success).toBe(true);
       expect(result.message).toBe('Login successful');
-      expect(result.data.user).not.toHaveProperty('password');
-      expect(result.data.user).not.toHaveProperty('loginAttempts');
-      expect(result.data.user).not.toHaveProperty('lockedUntil');
-      expect(result.data.user).toEqual({
+      expect(result.data!.user).not.toHaveProperty('password');
+      expect(result.data!.user).not.toHaveProperty('loginAttempts');
+      expect(result.data!.user).not.toHaveProperty('lockedUntil');
+      expect(result.data!.user).toEqual({
         id: mockUser.id,
         email: mockUser.email,
         firstName: mockUser.firstName,
