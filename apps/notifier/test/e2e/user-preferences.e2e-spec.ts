@@ -458,7 +458,7 @@ describe('Smart Notification Preferences Management', () => {
       await waitForNotificationProcessing(job, 10000, prisma);
 
       // The notification system should filter this out based on keywords
-      expect(refurbishedDeal.data.dealTitle.toLowerCase()).toContain(
+      expect(refurbishedDeal.data.dealTitle?.toLowerCase()).toContain(
         'refurbished'
       );
     });

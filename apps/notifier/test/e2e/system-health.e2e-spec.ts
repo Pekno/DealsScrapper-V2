@@ -411,8 +411,21 @@ describe('Notification System Health & Reliability', () => {
 
       await waitForNotificationProcessing(job);
 
-      // BUSINESS EXPECTATION: Notification processing creates audit records
-      const auditRecord = await prisma.notificationDelivery?.findFirst({
+      // BUSINESS EXPECTATION: Notification processing creates audit records.
+      // The optional NotificationDelivery delegate is not part of the current
+      // schema, so access it through a structural view that tolerates its absence.
+      const prismaWithDelivery = prisma as unknown as {
+        notificationDelivery?: {
+          findFirst: (args: unknown) => Promise<{
+            deliveredAt?: Date;
+            channel?: string;
+            status?: string;
+            notification?: unknown;
+          } | null>;
+        };
+      };
+
+      const auditRecord = await prismaWithDelivery.notificationDelivery?.findFirst({
         where: {
           userId: auditedUser.id,
           notification: {
