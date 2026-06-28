@@ -10,6 +10,7 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   token: string;
+  password: string;
   firstName: string;
   lastName: string;
 }
@@ -117,8 +118,9 @@ export async function createAuthenticatedDealHunter(
     id: user.id,
     email: userData.email,
     token: loginResponse.body.data.access_token,
-    firstName: userData.firstName,
-    lastName: userData.lastName,
+    password: userData.password,
+    firstName: userData.firstName ?? '',
+    lastName: userData.lastName ?? '',
   };
 }
 

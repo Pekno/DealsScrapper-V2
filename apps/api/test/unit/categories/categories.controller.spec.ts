@@ -14,7 +14,7 @@ describe('CategoriesController', () => {
       name: 'PC Gaming',
       siteId: 'dealabs',
       sourceUrl: 'https://www.dealabs.com/groupe/pc-gaming',
-      parentId: null,
+      parentId: undefined,
       level: 1,
       description: 'PC Gaming deals and hardware',
       dealCount: 150,

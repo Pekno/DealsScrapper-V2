@@ -150,7 +150,7 @@ describe('AdminController', () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.data.role).toBe(UserRole.ADMIN);
+      expect(result.data!.role).toBe(UserRole.ADMIN);
       expect(result.message).toBe('User role updated successfully');
       expect(mockAdminService.updateUserRole).toHaveBeenCalledWith(
         'user-1',
@@ -260,8 +260,8 @@ describe('AdminController', () => {
       const result = await controller.getSchedulerHealth();
 
       expect(result.success).toBe(true);
-      expect(result.data.scheduler.status).toBe('healthy');
-      expect(result.data.scrapers).toHaveLength(1);
+      expect(result.data!.scheduler.status).toBe('healthy');
+      expect(result.data!.scrapers).toHaveLength(1);
       expect(result.message).toBe('Scheduler health retrieved successfully');
     });
   });
