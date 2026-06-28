@@ -3,9 +3,15 @@ import { SharedConfigService } from '@dealscrapper/shared-config';
 import { CategoriesService } from '../../../src/categories/categories.service';
 import { PrismaService } from '@dealscrapper/database';
 
+interface MockPrismaService {
+  category: {
+    findMany: jest.Mock;
+  };
+}
+
 describe('CategoriesService', () => {
   let service: CategoriesService;
-  let prisma: jest.Mocked<PrismaService>;
+  let prisma: MockPrismaService;
   let sharedConfigService: jest.Mocked<SharedConfigService>;
 
   // Mock category at level 0 (main tab)
@@ -89,7 +95,7 @@ describe('CategoriesService', () => {
     },
   ];
 
-  const mockPrismaService = {
+  const mockPrismaService: MockPrismaService = {
     category: {
       findMany: jest.fn(),
     },
@@ -103,13 +109,13 @@ describe('CategoriesService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CategoriesService,
-        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: PrismaService, useValue: mockPrismaService as unknown as PrismaService },
         { provide: SharedConfigService, useValue: mockSharedConfigService },
       ],
     }).compile();
 
     service = module.get<CategoriesService>(CategoriesService);
-    prisma = module.get(PrismaService);
+    prisma = module.get(PrismaService) as unknown as MockPrismaService;
     sharedConfigService = module.get(SharedConfigService);
 
     jest.clearAllMocks();
