@@ -471,4 +471,143 @@ describe('ArticlesService - Article Search & Retrieval', () => {
       );
     });
   });
+
+  describe('findSimilar', () => {
+    const similarEsHit = {
+      _id: 'article-99',
+      _score: 12.4,
+      _source: {
+        source: SiteSource.VINTED,
+        title: 'RTX 4090 Gaming GPU - like new',
+        currentPrice: 1150,
+        url: 'https://vinted.fr/items/99',
+        scrapedAt: '2025-01-16T09:00:00Z',
+      },
+    };
+
+    it('should exclude the source site, filter active/non-expired, and apply a +/-15% price range when currentPrice is set', async () => {
+      // Arrange
+      (ArticleWrapper.load as jest.Mock).mockResolvedValue(mockDealabsArticle);
+      mockElasticsearchService.search.mockResolvedValue({
+        hits: { hits: [similarEsHit] },
+      });
+
+      // Act
+      await service.findSimilar('article-1');
+
+      // Assert
+      const passedQuery = mockElasticsearchService.search.mock.calls[0][0]
+        .query as {
+        bool: {
+          must: Record<string, unknown>[];
+          filter: Record<string, unknown>[];
+          must_not: Record<string, unknown>[];
+        };
+      };
+
+      // Excludes the source site (dealabs)
+      expect(passedQuery.bool.must_not).toEqual([
+        { term: { source: SiteSource.DEALABS } },
+      ]);
+
+      // Includes active + non-expired filters
+      expect(passedQuery.bool.filter).toEqual(
+        expect.arrayContaining([
+          { term: { isActive: true } },
+          { term: { isExpired: false } },
+        ])
+      );
+
+      // +/-15% price band around the source price (1200)
+      expect(passedQuery.bool.filter).toEqual(
+        expect.arrayContaining([
+          {
+            range: {
+              currentPrice: { gte: 1200 * 0.85, lte: 1200 * 1.15 },
+            },
+          },
+        ])
+      );
+
+      // Targets the correct index with the strict similarity defaults
+      expect(mockElasticsearchService.search).toHaveBeenCalledWith(
+        expect.objectContaining({
+          index: 'articles',
+          min_score: 8.0,
+          size: 5,
+        })
+      );
+    });
+
+    it('should omit the price range filter when source currentPrice is null', async () => {
+      // Arrange
+      const priceless = {
+        ...mockDealabsArticle,
+        base: { ...mockDealabsArticle.base, currentPrice: null },
+      };
+      (ArticleWrapper.load as jest.Mock).mockResolvedValue(priceless);
+      mockElasticsearchService.search.mockResolvedValue({
+        hits: { hits: [] },
+      });
+
+      // Act
+      await service.findSimilar('article-1');
+
+      // Assert
+      const passedQuery = mockElasticsearchService.search.mock.calls[0][0]
+        .query as { bool: { filter: Record<string, unknown>[] } };
+
+      const hasPriceRange = passedQuery.bool.filter.some(
+        (clause) =>
+          'range' in clause &&
+          typeof clause.range === 'object' &&
+          clause.range !== null &&
+          'currentPrice' in (clause.range as Record<string, unknown>)
+      );
+      expect(hasPriceRange).toBe(false);
+
+      // Active/non-expired filters still present
+      expect(passedQuery.bool.filter).toEqual([
+        { term: { isActive: true } },
+        { term: { isExpired: false } },
+      ]);
+    });
+
+    it('should map Elasticsearch hits to ProductSuggestion objects', async () => {
+      // Arrange
+      (ArticleWrapper.load as jest.Mock).mockResolvedValue(mockDealabsArticle);
+      mockElasticsearchService.search.mockResolvedValue({
+        hits: { hits: [similarEsHit] },
+      });
+
+      // Act
+      const result = await service.findSimilar('article-1');
+
+      // Assert
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        articleId: 'article-99',
+        score: 12.4,
+        source: SiteSource.VINTED,
+        title: 'RTX 4090 Gaming GPU - like new',
+        currentPrice: 1150,
+        url: 'https://vinted.fr/items/99',
+        scrapedAt: '2025-01-16T09:00:00Z',
+      });
+    });
+
+    it('should return an empty array when the source article is not found', async () => {
+      // Arrange
+      const notFoundError = new Error('Article not found');
+      notFoundError.name = 'ArticleNotFoundException';
+      (ArticleWrapper.load as jest.Mock).mockRejectedValue(notFoundError);
+
+      // Act
+      const result = await service.findSimilar('nonexistent');
+
+      // Assert
+      expect(result).toEqual([]);
+      expect(mockElasticsearchService.search).not.toHaveBeenCalled();
+    });
+  });
 });

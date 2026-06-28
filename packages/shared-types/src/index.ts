@@ -10,6 +10,7 @@ export * from './notifications.js';
 export * from './queues.js';
 export * from './site-source.js';
 export * from './extractor.js';
+export * from './product-suggestion.js';
 
 // Sites module (field definitions, filter rules, table columns)
 export * from './sites/index.js';

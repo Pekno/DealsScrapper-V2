@@ -1154,7 +1154,8 @@ describe('FilterMatcherService', () => {
             weight: 1.0,
           }, // Passes
         ],
-        minScore: 5.0,        matchLogic: 'AND',
+        minScore: 5.0,
+        matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
@@ -1213,7 +1214,8 @@ describe('FilterMatcherService', () => {
           { field: 'currentPrice', operator: '<=', value: 1500 }, // No weight
           { field: 'temperature', operator: '>=', value: 100 }, // No weight
         ],
-        minScore: 1.5,        matchLogic: 'AND',
+        minScore: 1.5,
+        matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
@@ -1236,7 +1238,8 @@ describe('FilterMatcherService', () => {
             weight: 2.0,
           }, // Passes
         ],
-        minScore: 3.0,        matchLogic: 'AND',
+        minScore: 3.0,
+        matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
@@ -1253,7 +1256,8 @@ describe('FilterMatcherService', () => {
           { field: 'currentPrice', operator: '<=', value: 1500, weight: 1.0 },
           { field: 'temperature', operator: '>=', value: 100, weight: 1.0 },
         ],
-        minScore: 0,        matchLogic: 'AND',
+        minScore: 0,
+        matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
