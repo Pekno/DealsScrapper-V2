@@ -134,7 +134,7 @@ export class SharedConfigService {
     const tlsEnabled = this.configService.get<boolean>('REDIS_TLS_ENABLED');
     if (tlsEnabled) {
       const rejectUnauthorized = this.configService.get<boolean>(
-        'REDIS_TLS_REJECT_UNAUTHORIZED',
+        'REDIS_TLS_REJECT_UNAUTHORIZED'
       );
       baseConfig.tls = {
         rejectUnauthorized: rejectUnauthorized ?? true,
@@ -283,7 +283,7 @@ export class SharedConfigService {
 
     throw new Error(
       `Invalid EMAIL_PROVIDER: '${emailProvider}'.` +
-      ` Set EMAIL_PROVIDER to 'gmail', 'resend', or 'mailhog', or leave it unset to disable email.`,
+        ` Set EMAIL_PROVIDER to 'gmail', 'resend', or 'mailhog', or leave it unset to disable email.`
     );
   }
 
