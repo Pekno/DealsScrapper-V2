@@ -191,7 +191,7 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
       expect(result).toBe(false);
     });
 
-    it.skip('V2 empty-filter: empty rules -> FALSE (target equals current API behavior)', () => {
+    it('V2 empty-filter: empty rules -> FALSE (target equals current API behavior)', () => {
       const expression: RuleBasedFilterExpression = { rules: [] };
 
       const result = service.evaluateFilterExpression(expression, article);
@@ -222,7 +222,7 @@ describe('filter-engine divergence vectors (Phase 7)', () => {
       expect(result).toBe(true);
     });
 
-    it.skip('V5 between-date: date BETWEEN in range -> TRUE (target equals current API behavior)', () => {
+    it('V5 between-date: date BETWEEN in range -> TRUE (target equals current API behavior)', () => {
       const expression: RuleBasedFilterExpression = {
         rules: [
           {

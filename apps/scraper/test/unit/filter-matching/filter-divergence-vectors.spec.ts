@@ -164,7 +164,7 @@ describe('filter-engine divergence vectors (scraper)', () => {
   // lands. These document the post-migration goal without failing now.
   // ==========================================================================
   describe('Phase 7 target (chosen-correct semantics) — skipped until migration', () => {
-    it.skip('V1 NOT-semantics target: NOR (none-true) => matches:false', async () => {
+    it('V1 NOT-semantics target: NOR (none-true) => matches:false', async () => {
       const expression: RuleBasedFilterExpression = {
         matchLogic: 'NOT',
         rules: [
@@ -198,7 +198,7 @@ describe('filter-engine divergence vectors (scraper)', () => {
       expect(result.matches).toBe(true);
     });
 
-    it.skip('V4 between-numeric target: currentPrice 1000 BETWEEN [500,1500] => matches:true', async () => {
+    it('V4 between-numeric target: currentPrice 1000 BETWEEN [500,1500] => matches:true', async () => {
       const expression: RuleBasedFilterExpression = {
         rules: [{ field: 'currentPrice', operator: 'BETWEEN', value: [500, 1500] }],
       };
@@ -208,7 +208,7 @@ describe('filter-engine divergence vectors (scraper)', () => {
       expect(result.matches).toBe(true);
     });
 
-    it.skip('V5 between-date target: publishedAt 2025-06-15 BETWEEN [Jun 1, Jun 30] => matches:true', async () => {
+    it('V5 between-date target: publishedAt 2025-06-15 BETWEEN [Jun 1, Jun 30] => matches:true', async () => {
       const expression: RuleBasedFilterExpression = {
         rules: [
           {
