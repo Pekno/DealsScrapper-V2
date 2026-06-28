@@ -117,8 +117,8 @@ describe('ArticlesController - Article Search API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Articles retrieved successfully');
-      expect(result.data.articles).toHaveLength(2);
-      expect(result.data.total).toBe(2);
+      expect(result.data!.articles).toHaveLength(2);
+      expect(result.data!.total).toBe(2);
       expect(mockArticlesService.search).toHaveBeenCalledWith(searchDto);
     });
 
@@ -138,8 +138,8 @@ describe('ArticlesController - Article Search API', () => {
 
       // Assert
       expect(result.success).toBe(true);
-      expect(result.data.articles).toHaveLength(0);
-      expect(result.data.total).toBe(0);
+      expect(result.data!.articles).toHaveLength(0);
+      expect(result.data!.total).toBe(0);
     });
 
     it('should pass site filters to service', async () => {
@@ -256,8 +256,8 @@ describe('ArticlesController - Article Search API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Article retrieved successfully');
-      expect(result.data.base.id).toBe('article-1');
-      expect(result.data.source).toBe(SiteSource.DEALABS);
+      expect(result.data!.base.id).toBe('article-1');
+      expect(result.data!.source).toBe(SiteSource.DEALABS);
       expect(mockArticlesService.getById).toHaveBeenCalledWith('article-1');
     });
 
@@ -270,9 +270,9 @@ describe('ArticlesController - Article Search API', () => {
 
       // Assert
       expect(result.success).toBe(true);
-      expect(result.data.source).toBe(SiteSource.VINTED);
-      expect(result.data.vintedExtension).toBeDefined();
-      expect(result.data.vintedExtension?.brand).toBe('Nike');
+      expect(result.data!.source).toBe(SiteSource.VINTED);
+      expect(result.data!.vintedExtension).toBeDefined();
+      expect(result.data!.vintedExtension?.brand).toBe('Nike');
     });
 
     it('should propagate service errors', async () => {
