@@ -43,9 +43,19 @@ interface MockFilterWithCategories {
   updatedAt?: Date;
 }
 
+// Structural mock for PrismaService. jest.Mocked<PrismaService> cannot deeply
+// mock Prisma's generated delegate methods (findMany resolves to the real
+// PrismaPromise signature, which lacks jest.Mock helpers like mockResolvedValue),
+// so the delegate method is typed explicitly as jest.Mock.
+interface MockPrismaService {
+  filter: {
+    findMany: jest.Mock;
+  };
+}
+
 describe('FilterMatcherService', () => {
   let service: FilterMatcherService;
-  let mockPrisma: jest.Mocked<PrismaService>;
+  let mockPrisma: MockPrismaService;
 
   // Mock test data - Dealabs article
   const mockDealabsArticleBase: MockArticleBase = {
@@ -136,14 +146,14 @@ describe('FilterMatcherService', () => {
       filter: {
         findMany: jest.fn(),
       },
-    } as unknown as jest.Mocked<PrismaService>;
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FilterMatcherService,
         {
           provide: PrismaService,
-          useValue: mockPrisma,
+          useValue: mockPrisma as unknown as PrismaService,
         },
       ],
     }).compile();
@@ -895,7 +905,7 @@ describe('FilterMatcherService', () => {
         );
 
         const result = service.evaluateRule(
-          { field: 'location', operator: 'IS_FALSE', value: false },
+          { field: 'location' as FilterRule['field'], operator: 'IS_FALSE', value: false },
           articleWithNull,
         );
         expect(result).toBe(true);
@@ -943,7 +953,7 @@ describe('FilterMatcherService', () => {
         // Article published ~1 hour ago, test for older than 0.5 hours
         const result = service.evaluateRule(
           {
-            field: 'scrapedAt',
+            field: 'scrapedAt' as FilterRule['field'],
             operator: 'OLDER_THAN',
             value: 0.01, // 0.01 hours = ~36 seconds
           },
@@ -965,7 +975,7 @@ describe('FilterMatcherService', () => {
 
         const result = service.evaluateRule(
           {
-            field: 'scrapedAt',
+            field: 'scrapedAt' as FilterRule['field'],
             operator: 'NEWER_THAN',
             value: 1, // 1 hour
           },
