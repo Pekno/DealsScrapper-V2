@@ -2,12 +2,39 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
 import { DeliveryTrackingService } from '../../../src/services/delivery-tracking.service.js';
 import { PrismaService } from '@dealscrapper/database';
-import Redis from 'ioredis';
+import { SiteSource } from '@dealscrapper/shared-types';
+
+/**
+ * Structural mock of the Prisma delegate methods used by DeliveryTrackingService.
+ * `jest.Mocked<PrismaService>` cannot traverse Prisma's generic delegate function
+ * types, so the nested `.mockResolvedValue` helpers are not visible. Typing the
+ * nested methods as `jest.Mock` exposes the jest mock API while keeping DI intact.
+ */
+type MockedPrisma = {
+  notification: Record<
+    | 'findMany'
+    | 'findUnique'
+    | 'findFirst'
+    | 'create'
+    | 'update'
+    | 'updateMany'
+    | 'delete'
+    | 'count'
+    | 'deleteMany',
+    jest.Mock
+  >;
+  deliveryAttempt: Record<'create' | 'findMany' | 'count', jest.Mock>;
+};
+
+type MockedRedis = Record<
+  'set' | 'setex' | 'get' | 'del' | 'keys' | 'expire' | 'zadd' | 'zrangebyscore' | 'zrem',
+  jest.Mock
+>;
 
 describe('DeliveryTrackingService', () => {
   let service: DeliveryTrackingService;
-  let prismaService: jest.Mocked<PrismaService>;
-  let redisClient: jest.Mocked<Redis>;
+  let prismaService: MockedPrisma;
+  let redisClient: MockedRedis;
 
   const mockNotification = {
     id: 'notification-123',
@@ -26,7 +53,7 @@ describe('DeliveryTrackingService', () => {
   };
 
   beforeEach(async () => {
-    const mockPrisma = {
+    const mockPrisma: MockedPrisma = {
       notification: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
@@ -45,7 +72,7 @@ describe('DeliveryTrackingService', () => {
       },
     };
 
-    const mockRedis = {
+    const mockRedis: MockedRedis = {
       set: jest.fn().mockResolvedValue('OK'),
       setex: jest.fn().mockResolvedValue('OK'),
       get: jest.fn(),
@@ -66,8 +93,8 @@ describe('DeliveryTrackingService', () => {
     }).compile();
 
     service = module.get<DeliveryTrackingService>(DeliveryTrackingService);
-    prismaService = module.get(PrismaService);
-    redisClient = module.get('REDIS_CLIENT');
+    prismaService = module.get<MockedPrisma>(PrismaService);
+    redisClient = module.get<MockedRedis>('REDIS_CLIENT');
 
     jest.spyOn(Logger.prototype, 'log').mockImplementation();
     jest.spyOn(Logger.prototype, 'error').mockImplementation();
@@ -83,7 +110,16 @@ describe('DeliveryTrackingService', () => {
       const deliveryData = {
         userId: 'user-123',
         type: 'deal-match' as const,
-        notificationPayload: { dealId: 'deal-123' },
+        notificationPayload: {
+          id: 'notif_payload_1',
+          siteId: SiteSource.DEALABS,
+          type: 'DEAL_MATCH' as const,
+          title: 'Great deal',
+          message: 'A deal matched your filter',
+          data: { dealData: { title: 'Great deal', url: 'https://example.com/deal' } },
+          timestamp: '2024-01-15T10:00:00Z',
+          read: false,
+        },
         priority: 'normal' as const,
       };
 
@@ -100,7 +136,17 @@ describe('DeliveryTrackingService', () => {
       const deliveryData = {
         userId: 'user-123',
         type: 'deal-match' as const,
-        notificationPayload: { matchId: 'match-456', dealId: 'deal-123' },
+        notificationPayload: {
+          id: 'notif_payload_2',
+          siteId: SiteSource.DEALABS,
+          type: 'DEAL_MATCH' as const,
+          title: 'Great deal',
+          message: 'A deal matched your filter',
+          matchId: 'match-456',
+          data: { dealData: { title: 'Great deal', url: 'https://example.com/deal' } },
+          timestamp: '2024-01-15T10:00:00Z',
+          read: false,
+        },
         priority: 'normal' as const,
       };
 
@@ -230,7 +276,7 @@ describe('DeliveryTrackingService', () => {
     it('should delete old delivery records', async () => {
       prismaService.notification.deleteMany.mockResolvedValue({ count: 10 });
 
-      await service.cleanupOldDeliveries(30);
+      await service.cleanupOldDeliveries();
 
       expect(prismaService.notification.deleteMany).toHaveBeenCalled();
     });
