@@ -41,7 +41,7 @@ describe('LeBonCoinAdapter', () => {
 
   beforeEach(async () => {
     llmExtractionService = {
-      extract: jest.fn().mockResolvedValue(mockUniversalListing),
+      extract: jest.fn().mockResolvedValue({ listing: mockUniversalListing, ollamaMs: 42 }),
     } as unknown as jest.Mocked<LlmExtractionService>;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -113,7 +113,7 @@ describe('LeBonCoinAdapter', () => {
         'https://www.leboncoin.fr/recherche?category=15',
       );
       expect(llmExtractionService.extract).toHaveBeenCalledTimes(2);
-      expect(listings).toHaveLength(2);
+      expect(listings.listings).toHaveLength(2);
     });
 
     it('should skip listings where LLM extraction fails', async () => {
@@ -129,7 +129,7 @@ describe('LeBonCoinAdapter', () => {
         html,
         'https://www.leboncoin.fr/recherche?category=15',
       );
-      expect(listings).toHaveLength(1);
+      expect(listings.listings).toHaveLength(1);
     });
   });
 

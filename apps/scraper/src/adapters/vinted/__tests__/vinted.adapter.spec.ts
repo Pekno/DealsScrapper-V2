@@ -37,7 +37,7 @@ describe('VintedAdapter', () => {
 
   beforeEach(async () => {
     llmExtractionService = {
-      extract: jest.fn().mockResolvedValue(mockUniversalListing),
+      extract: jest.fn().mockResolvedValue({ listing: mockUniversalListing, ollamaMs: 42 }),
     } as unknown as jest.Mocked<LlmExtractionService>;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -115,7 +115,7 @@ describe('VintedAdapter', () => {
         'https://www.vinted.fr/catalog/1904-women',
       );
       expect(llmExtractionService.extract).toHaveBeenCalledTimes(2);
-      expect(listings).toHaveLength(2);
+      expect(listings.listings).toHaveLength(2);
     });
 
     it('should skip listings where LLM extraction fails', async () => {
@@ -131,7 +131,7 @@ describe('VintedAdapter', () => {
         html,
         'https://www.vinted.fr/catalog/1904-women',
       );
-      expect(listings).toHaveLength(1);
+      expect(listings.listings).toHaveLength(1);
     });
   });
 
