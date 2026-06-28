@@ -3,7 +3,12 @@ import * as cheerio from 'cheerio';
 import type { Cheerio } from 'cheerio';
 import type { Element } from 'domhandler';
 import { SiteSource } from '@dealscrapper/shared-types';
-import { BaseSiteAdapter, type ListingElementId } from '../base/base-site-adapter.js';
+import {
+  BaseSiteAdapter,
+  type ListingElementId,
+  type SelectorExtractor,
+} from '../base/base-site-adapter.js';
+import { extractLeBonCoinListingFromSelectors } from './leboncoin-selector-extractor.js';
 import { LlmExtractionService } from '../../llm-extraction/llm-extraction.service.js';
 
 @Injectable()
@@ -22,6 +27,10 @@ export class LeBonCoinAdapter extends BaseSiteAdapter {
       value: $element.attr('data-qa-id') ?? $element.attr('id') ?? 'unknown',
       label: 'ad-id',
     };
+  }
+
+  protected getSelectorExtractor(): SelectorExtractor {
+    return extractLeBonCoinListingFromSelectors;
   }
 
   buildCategoryUrl(categorySlug: string, page: number = 1): string {
