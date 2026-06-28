@@ -107,7 +107,7 @@ export const createBargainFilter = (
     scoreMode: 'weighted',
   },
   immediateNotifications: true,
-  digestFrequency: 'immediately',
+  digestFrequency: 'hourly',
   maxNotificationsPerDay: 15,
   active: true,
   categoryIds: [], // Required field - must be provided via overrides
