@@ -9,13 +9,25 @@ import { EmailService } from '../../../src/channels/email.service.js';
 import { ChannelHealthService } from '../../../src/services/channel-health.service.js';
 import { PrismaService } from '@dealscrapper/database';
 
+/**
+ * Structural mock of the Prisma delegates used by the processor. The generated
+ * Prisma delegate methods are complex generic function types that `jest.Mocked`
+ * cannot deeply traverse, so the nested methods are typed explicitly as
+ * `jest.Mock`.
+ */
+type MockPrismaService = {
+  user: Record<'findUnique', jest.Mock>;
+  filter: Record<'findUnique', jest.Mock>;
+  notification: Record<'create' | 'update', jest.Mock>;
+};
+
 describe('NotificationProcessor', () => {
   let processor: NotificationProcessor;
   let websocketGateway: jest.Mocked<NotificationGateway>;
   let preferencesService: jest.Mocked<NotificationPreferencesService>;
   let deliveryTracking: jest.Mocked<DeliveryTrackingService>;
   let emailService: jest.Mocked<EmailService>;
-  let prismaService: jest.Mocked<PrismaService>;
+  let prismaService: MockPrismaService;
 
   beforeEach(async () => {
     const mockGateway = {
@@ -95,7 +107,7 @@ describe('NotificationProcessor', () => {
     preferencesService = module.get(NotificationPreferencesService);
     deliveryTracking = module.get(DeliveryTrackingService);
     emailService = module.get(EmailService);
-    prismaService = module.get(PrismaService);
+    prismaService = module.get(PrismaService) as unknown as MockPrismaService;
 
     jest.spyOn(Logger.prototype, 'log').mockImplementation();
     jest.spyOn(Logger.prototype, 'error').mockImplementation();

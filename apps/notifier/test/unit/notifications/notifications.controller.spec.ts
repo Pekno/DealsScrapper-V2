@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
+import { UnifiedNotificationPayload, SiteSource } from '@dealscrapper/shared-types';
 import { NotificationsController } from '../../../src/notifications/notifications.controller.js';
 import { NotificationsService } from '../../../src/notifications/notifications.service.js';
 import { JwtAuthGuard } from '../../../src/auth/jwt-auth.guard.js';
@@ -45,8 +46,19 @@ describe('NotificationsController', () => {
 
   describe('getNotifications()', () => {
     it('should return notifications for authenticated user', async () => {
+      const mockPayload: UnifiedNotificationPayload = {
+        id: 'notif_123',
+        siteId: SiteSource.DEALABS,
+        type: 'DEAL_MATCH',
+        title: 'New deal',
+        message: 'A deal matched your filter',
+        data: { dealId: 'deal-123' },
+        timestamp: new Date().toISOString(),
+        read: false,
+      };
+
       const mockResponse = {
-        data: [{ type: 'deal-match', data: { dealId: 'deal-123' } }],
+        data: [mockPayload],
         totalCount: 1,
         unreadCount: 1,
         currentPage: 1,
