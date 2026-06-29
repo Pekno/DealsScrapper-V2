@@ -11,18 +11,33 @@ import { EmailService } from '../../../src/channels/email.service';
 import { Socket, Server } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { SharedConfigService } from '@dealscrapper/shared-config';
+import { SiteSource, UnifiedNotificationPayload } from '@dealscrapper/shared-types';
+
+// Structural mock types: jest.Mocked cannot deeply mock Prisma's nested
+// generic delegate methods or SharedConfigService's overloaded getters, so
+// the methods exercised by these tests are typed as plain jest.Mock.
+type MockPrismaService = {
+  user: Record<'findUnique' | 'findMany' | 'update', jest.Mock>;
+  notification: Record<'create' | 'findMany' | 'update', jest.Mock>;
+};
+
+type MockSharedConfigService = Record<'get' | 'getOrThrow', jest.Mock>;
+
+// jest.Mocked<JwtService> types verifyAsync as Promise<object>, which rejects
+// the null-payload case these tests exercise for invalid tokens.
+type MockJwtService = Record<'verifyAsync' | 'decode', jest.Mock>;
 
 describe('NotificationGateway - Enhanced Tests', () => {
   let gateway: NotificationGateway;
-  let jwtService: jest.Mocked<JwtService>;
+  let jwtService: MockJwtService;
   let userStatusService: jest.Mocked<UserStatusService>;
   let activityTrackingService: jest.Mocked<ActivityTrackingService>;
   let rateLimitingService: jest.Mocked<RateLimitingService>;
   let notificationPreferencesService: jest.Mocked<NotificationPreferencesService>;
-  let prismaService: jest.Mocked<PrismaService>;
+  let prismaService: MockPrismaService;
   let deliveryTrackingService: jest.Mocked<DeliveryTrackingService>;
   let emailService: jest.Mocked<EmailService>;
-  let sharedConfigService: jest.Mocked<SharedConfigService>;
+  let sharedConfigService: MockSharedConfigService;
   let mockServer: jest.Mocked<Server>;
 
   const createMockSocket = (overrides: Partial<Socket> = {}) => {
@@ -169,15 +184,15 @@ describe('NotificationGateway - Enhanced Tests', () => {
     }).compile();
 
     gateway = module.get<NotificationGateway>(NotificationGateway);
-    jwtService = module.get(JwtService);
+    jwtService = module.get<MockJwtService>(JwtService);
     userStatusService = module.get(UserStatusService);
     activityTrackingService = module.get(ActivityTrackingService);
     rateLimitingService = module.get(RateLimitingService);
     notificationPreferencesService = module.get(NotificationPreferencesService);
     deliveryTrackingService = module.get(DeliveryTrackingService);
     emailService = module.get(EmailService);
-    prismaService = module.get(PrismaService);
-    sharedConfigService = module.get(SharedConfigService);
+    prismaService = module.get<MockPrismaService>(PrismaService);
+    sharedConfigService = module.get<MockSharedConfigService>(SharedConfigService);
 
     mockServer = createMockServer();
     gateway.server = mockServer;
@@ -189,13 +204,14 @@ describe('NotificationGateway - Enhanced Tests', () => {
     });
     rateLimitingService.checkConnectionRateLimit.mockResolvedValue({
       allowed: true,
-      retryAfter: null,
+      remaining: 5,
+      resetTime: new Date(),
     });
     rateLimitingService.isBlacklisted.mockResolvedValue(false);
     prismaService.user.findUnique.mockResolvedValue({
       id: 'user-123',
       email: 'test@example.com',
-    } as { id: string; email: string });
+    } as User);
     userStatusService.getUserStatus.mockResolvedValue(null);
     activityTrackingService.recordActivity.mockResolvedValue(undefined);
     sharedConfigService.getOrThrow.mockReturnValue('test-jwt-secret');
@@ -303,6 +319,8 @@ describe('NotificationGateway - Enhanced Tests', () => {
       const socket = createMockSocket();
       rateLimitingService.checkConnectionRateLimit.mockResolvedValue({
         allowed: false,
+        remaining: 0,
+        resetTime: new Date(),
         retryAfter: 300,
       });
 
@@ -320,6 +338,7 @@ describe('NotificationGateway - Enhanced Tests', () => {
       const socket = createMockSocket();
       rateLimitingService.isBlacklisted.mockResolvedValue(true);
       rateLimitingService.getBlacklistInfo.mockResolvedValue({
+        isBlacklisted: true,
         reason: 'Automated abuse detected',
         expiresAt: new Date(Date.now() + 3600000),
       });
@@ -522,9 +541,9 @@ describe('NotificationGateway - Enhanced Tests', () => {
 
     it('should handle notification preferences updates', async () => {
       const preferences = {
-        enableInApp: false,
-        enableEmail: true,
-        quietHours: { start: '23:00', end: '07:00' },
+        inApp: false,
+        email: true,
+        quietHours: { enabled: true, start: '23:00', end: '07:00' },
       };
 
       await gateway.handleUpdatePreferences(authenticatedSocket, preferences);
@@ -539,13 +558,14 @@ describe('NotificationGateway - Enhanced Tests', () => {
 
     it('should handle activity tracking messages', async () => {
       const activityData = {
-        type: 'page_view',
+        type: 'click' as const,
         metadata: { page: '/deals', category: 'electronics' },
       };
 
       rateLimitingService.checkMessageRateLimit.mockResolvedValue({
         allowed: true,
-        retryAfter: null,
+        remaining: 10,
+        resetTime: new Date(),
       });
 
       await gateway.handleActivity(authenticatedSocket, activityData);
@@ -553,7 +573,7 @@ describe('NotificationGateway - Enhanced Tests', () => {
       expect(activityTrackingService.recordActivity).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'user-123',
-          activityType: 'page_view',
+          activityType: 'click',
           metadata: expect.objectContaining({
             sessionId: 'socket-123',
             deviceType: 'web',
@@ -567,10 +587,12 @@ describe('NotificationGateway - Enhanced Tests', () => {
     it('should enforce message rate limiting', async () => {
       rateLimitingService.checkMessageRateLimit.mockResolvedValue({
         allowed: false,
+        remaining: 0,
+        resetTime: new Date(),
         retryAfter: 60,
       });
 
-      const message = { type: 'test' };
+      const message = { type: 'click' as const };
 
       await gateway.handleActivity(authenticatedSocket, message);
 
@@ -582,10 +604,11 @@ describe('NotificationGateway - Enhanced Tests', () => {
     });
 
     it('should update user activity on activity message', async () => {
-      const message = { type: 'mouse', metadata: { x: 100, y: 200 } };
+      const message = { type: 'mouse' as const, metadata: { x: 100, y: 200 } };
       rateLimitingService.checkMessageRateLimit.mockResolvedValue({
         allowed: true,
-        retryAfter: null,
+        remaining: 10,
+        resetTime: new Date(),
       });
 
       await gateway.handleActivity(authenticatedSocket, message);
@@ -599,22 +622,27 @@ describe('NotificationGateway - Enhanced Tests', () => {
 
   describe('Notification Broadcasting', () => {
     it('should broadcast deal match notifications', async () => {
-      const notification = {
-        type: 'deal-match' as const,
+      const notification: UnifiedNotificationPayload = {
+        id: 'notif-123',
+        siteId: SiteSource.DEALABS,
+        type: 'DEAL_MATCH',
+        title: 'Amazing Deal',
+        message: 'A great deal matched your filter',
         data: {
           dealId: 'deal-123',
           title: 'Amazing Deal',
           price: 99.99,
           score: 95,
         },
-        priority: 'high' as const,
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
+        read: false,
       };
 
       // Mock service responses
-      deliveryTrackingService.createDelivery.mockResolvedValue(
-        'notification-123'
-      );
+      deliveryTrackingService.createDelivery.mockResolvedValue({
+        deliveryId: 'notification-123',
+        deduplicated: false,
+      });
       deliveryTrackingService.recordAttempt.mockResolvedValue(undefined);
       emailService.sendEmail.mockResolvedValue(true);
       prismaService.user.findUnique.mockResolvedValue({
@@ -646,24 +674,29 @@ describe('NotificationGateway - Enhanced Tests', () => {
         expect.objectContaining({
           type: notification.type,
           data: notification.data,
-          priority: notification.priority,
+          title: notification.title,
           timestamp: notification.timestamp,
         })
       );
     });
 
     it('should return false when user not connected', async () => {
-      const notification = {
-        type: 'deal-match' as const,
+      const notification: UnifiedNotificationPayload = {
+        id: 'notif-456',
+        siteId: SiteSource.DEALABS,
+        type: 'DEAL_MATCH',
+        title: 'Deal Alert',
+        message: 'A deal matched your filter',
         data: { dealId: 'deal-123' },
-        priority: 'normal' as const,
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
+        read: false,
       };
 
       // Mock service responses for offline user
-      deliveryTrackingService.createDelivery.mockResolvedValue(
-        'notification-123'
-      );
+      deliveryTrackingService.createDelivery.mockResolvedValue({
+        deliveryId: 'notification-123',
+        deduplicated: false,
+      });
       deliveryTrackingService.recordAttempt.mockResolvedValue(undefined);
       emailService.sendEmail.mockResolvedValue(false); // Email fails
       prismaService.user.findUnique.mockResolvedValue({
@@ -1000,7 +1033,8 @@ describe('NotificationGateway - Enhanced Tests', () => {
       const socket = createMockSocket();
       rateLimitingService.checkMessageRateLimit.mockResolvedValue({
         allowed: true,
-        retryAfter: null,
+        remaining: 10,
+        resetTime: new Date(),
       });
 
       // Connect
@@ -1010,11 +1044,11 @@ describe('NotificationGateway - Enhanced Tests', () => {
       await gateway.handleHeartbeat(socket);
 
       // Update preferences
-      await gateway.handleUpdatePreferences(socket, { enableInApp: false });
+      await gateway.handleUpdatePreferences(socket, { inApp: false });
 
       // Track activity
       await gateway.handleActivity(socket, {
-        type: 'view_deal',
+        type: 'click',
         metadata: { dealId: 'deal-123' },
       });
 
@@ -1033,10 +1067,14 @@ describe('NotificationGateway - Enhanced Tests', () => {
       });
 
       await gateway.sendToUser('user-123', {
-        type: 'deal-match',
+        id: 'notif-789',
+        siteId: SiteSource.DEALABS,
+        type: 'DEAL_MATCH',
+        title: 'Deal Alert',
+        message: 'A deal matched your filter',
         data: { dealId: 'deal-456' },
-        priority: 'high',
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
+        read: false,
       });
 
       // Disconnect

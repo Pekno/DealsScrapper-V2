@@ -17,6 +17,7 @@ import { FilterMatchingModule } from '../../src/filter-matching/filter-matching.
 import { NotificationModule } from '../../src/notification/notification.module.js';
 import { ScraperHealthService } from '../../src/health/scraper-health.service.js';
 import { DealElasticSearchModule } from '../../src/elasticsearch/elasticsearch.module.js';
+import { OllamaModule } from '../../src/llm-extraction/ollama/ollama.module.js';
 // NOTE: PageScrapingModule and DealExtractionModule were removed during architecture refactor
 // NOTE: WorkerRegistrationModule excluded for testing
 
@@ -66,6 +67,12 @@ import { DealElasticSearchModule } from '../../src/elasticsearch/elasticsearch.m
         // Optional Variables
         PUPPETEER_EXECUTABLE_PATH: 'OPTIONAL', // undefined is acceptable
         REDIS_PASSWORD: 'OPTIONAL', // undefined is acceptable (no auth)
+
+        // Ollama / LLM Configuration
+        OLLAMA_URL: 'REQUIRED',
+        OLLAMA_MODEL: 'OPTIONAL',
+        LLM_CONCURRENCY: 'OPTIONAL',
+        LLM_TIMEOUT_MS: 'OPTIONAL',
       },
     }),
     BullModule.forRootAsync({
@@ -93,6 +100,7 @@ import { DealElasticSearchModule } from '../../src/elasticsearch/elasticsearch.m
       inject: [SharedConfigService],
     }),
     PrismaModule,
+    OllamaModule,
     DealElasticSearchModule,
     PuppeteerPoolModule,
     JobProcessorModule,

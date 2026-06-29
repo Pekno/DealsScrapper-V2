@@ -2,7 +2,7 @@ import { defineCommand } from 'citty';
 import { Listr, delay } from 'listr2';
 import { existsSync, copyFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { composeExec, getHealthyContainerCount, shellExec } from '../lib/docker.js';
+import { composeStream, composeExec, getHealthyContainerCount, shellExec } from '../lib/docker.js';
 import { PROJECT_ROOT, TEST_COMPOSE_FILE, INFRA_SERVICES } from '../lib/constants.js';
 import * as ui from '../lib/ui.js';
 
@@ -45,18 +45,24 @@ export const infraStart = defineCommand({
       },
       {
         title: 'Launching Docker services',
-        task: () => {
-          composeExec(TEST_COMPOSE_FILE, [
-            'up', '-d',
-            'postgres-test', 'redis-test', 'elasticsearch-test', 'mailhog-test',
-          ]);
+        task: async (_, task) => {
+          // Start all core infra services plus the one-shot ollama model pull
+          // sidecar. The sidecar is excluded from INFRA_SERVICES so the health
+          // loop below does not wait on it (it runs and exits).
+          await composeStream(
+            TEST_COMPOSE_FILE,
+            ['up', '-d', ...INFRA_SERVICES, 'ollama-test-model-pull'],
+            (line) => { task.output = line; },
+            { envFile: resolve(PROJECT_ROOT, '.env.test') },
+          );
         },
       },
       {
         title: 'Waiting for services to become healthy',
         task: async (_, task) => {
           const total = INFRA_SERVICES.length;
-          const timeoutMs = 60_000;
+          // Ollama image pull + first boot can take a while on cold caches.
+          const timeoutMs = 180_000;
           const start = Date.now();
 
           while (Date.now() - start < timeoutMs) {
@@ -70,7 +76,7 @@ export const infraStart = defineCommand({
             await delay(3000);
           }
 
-          throw new Error('Timeout: some services did not become healthy within 60s');
+          throw new Error(`Timeout: some services did not become healthy within ${timeoutMs / 1000}s`);
         },
       },
       {
@@ -93,6 +99,7 @@ export const infraStart = defineCommand({
       { name: 'Redis', url: 'localhost:6380' },
       { name: 'Elasticsearch', url: 'localhost:9201' },
       { name: 'MailHog UI', url: 'http://localhost:8025' },
+      { name: 'Ollama', url: 'http://localhost:11435' },
     ]);
 
     ui.done('Infrastructure ready!');

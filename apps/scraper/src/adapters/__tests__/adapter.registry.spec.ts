@@ -4,7 +4,8 @@ import { DealabsAdapter } from '../dealabs/dealabs.adapter';
 import { VintedAdapter } from '../vinted/vinted.adapter';
 import { LeBonCoinAdapter } from '../leboncoin/leboncoin.adapter';
 import { DealabsUrlOptimizer } from '../dealabs/dealabs-url-optimizer';
-import { FieldExtractorService } from '../../field-extraction/field-extractor.service';
+import { DealabsExpiryResolver } from '../dealabs/dealabs-expiry-resolver';
+import { LlmExtractionService } from '../../llm-extraction/llm-extraction.service';
 import { SiteSource } from '@dealscrapper/shared-types';
 
 describe('AdapterRegistry', () => {
@@ -18,7 +19,8 @@ describe('AdapterRegistry', () => {
         VintedAdapter,
         LeBonCoinAdapter,
         DealabsUrlOptimizer,
-        FieldExtractorService,
+        DealabsExpiryResolver,
+        { provide: LlmExtractionService, useValue: { extract: jest.fn() } },
       ],
     }).compile();
 

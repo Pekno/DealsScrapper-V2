@@ -4,7 +4,7 @@ import { UnifiedNotificationPayload } from '@dealscrapper/shared-types';
 import { Redis } from 'ioredis';
 import { PrismaService, Notification, Prisma } from '@dealscrapper/database';
 import { withErrorHandling } from '../utils/error-handling.utils.js';
-import { setRedisJson, getRedisJson, safeJsonParse, scanKeys } from '../utils/redis-helpers.utils.js';
+import { setRedisJson, getRedisJson } from '../utils/redis-helpers.utils.js';
 import { notifierLogConfig } from '../config/logging.config.js';
 import {
   serializeNotificationPayload,
@@ -43,6 +43,20 @@ export interface NotificationDelivery {
 }
 
 /**
+ * Result of a createDelivery call.
+ *
+ * `deduplicated` reports whether the call hit an existing notification for the
+ * same `(userId, dedupKey)` / `(userId, matchId)` event (no new row was created).
+ * Callers use this to avoid re-sending — and therefore re-delivering an email —
+ * for an event that was already delivered. The dedup DECISION itself is unchanged;
+ * this only surfaces it.
+ */
+export interface CreateDeliveryResult {
+  deliveryId: string;
+  deduplicated: boolean;
+}
+
+/**
  * NOTE: UnifiedNotificationPayload has been moved to @dealscrapper/shared-types
  *
  * This type is now shared across:
@@ -74,11 +88,49 @@ export class DeliveryTrackingService {
       NotificationDelivery,
       'id' | 'attempts' | 'finalStatus' | 'createdAt'
     >
-  ): Promise<string> {
+  ): Promise<CreateDeliveryResult> {
     return withErrorHandling(
       this.logger,
       'creating delivery record',
       async () => {
+        const matchId = delivery.notificationPayload.matchId ?? null;
+        const dedupKey = delivery.notificationPayload.dedupKey ?? null;
+
+        // Idempotency: a retried Bull job must not re-create the Notification
+        // (and re-send) for the same logical event.
+        //
+        // When the producer supplies an event-granular dedupKey, dedup on
+        // (userId, dedupKey). This keeps the initial match and a later price-drop
+        // re-alert (which reuse the same matchId) distinct, while a re-detect of
+        // the SAME drop (same dedupKey) is deduped.
+        //
+        // When no dedupKey is present, fall back to the legacy (userId, matchId)
+        // guard. Only DEAL_MATCH payloads carry a matchId;
+        // SYSTEM/verification/password-reset/digest do not and always create.
+        if (dedupKey !== null) {
+          const existing = await this.prisma.notification.findFirst({
+            where: { userId: delivery.userId, dedupKey },
+          });
+
+          if (existing) {
+            this.logger.debug(
+              `⏭️ Skipping duplicate delivery for user ${delivery.userId} dedupKey ${dedupKey} (existing ${existing.id})`
+            );
+            return { deliveryId: existing.id, deduplicated: true };
+          }
+        } else if (matchId !== null) {
+          const existing = await this.prisma.notification.findFirst({
+            where: { userId: delivery.userId, matchId },
+          });
+
+          if (existing) {
+            this.logger.debug(
+              `⏭️ Skipping duplicate delivery for user ${delivery.userId} matchId ${matchId} (existing ${existing.id})`
+            );
+            return { deliveryId: existing.id, deduplicated: true };
+          }
+        }
+
         const deliveryId = this.generateDeliveryId();
 
         const fullDelivery: NotificationDelivery = {
@@ -103,6 +155,7 @@ export class DeliveryTrackingService {
             id: deliveryId,
             userId: delivery.userId,
             matchId: delivery.notificationPayload.matchId ?? null, // Store matchId from payload (DEAL_MATCH only)
+            dedupKey: delivery.notificationPayload.dedupKey ?? null, // Event-granular idempotency key (DEAL_MATCH/price-drop)
             type: delivery.notificationPayload.type,
             subject: delivery.notificationPayload.title, // Store title in subject for backward compatibility
             content: serializeNotificationPayload(delivery.notificationPayload), // Store complete unified payload
@@ -127,7 +180,7 @@ export class DeliveryTrackingService {
         this.logger.debug(
           `📝 Created delivery record ${deliveryId} for user ${delivery.userId} with unified payload`
         );
-        return deliveryId;
+        return { deliveryId, deduplicated: false };
       }
     );
   }
@@ -290,59 +343,6 @@ export class DeliveryTrackingService {
       {
         throwOnError: false,
         fallbackValue: { total: 0, delivered: 0, failed: 0, pending: 0, deliveryRate: 0 }
-      }
-    );
-  }
-
-  /**
-   * Get failed deliveries that need retry
-   */
-  async getFailedDeliveriesForRetry(): Promise<NotificationDelivery[]> {
-    return withErrorHandling(
-      this.logger,
-      'getting failed deliveries for retry',
-      async () => {
-        const pattern = 'delivery:*';
-        // Use SCAN instead of KEYS to prevent blocking Redis in production
-        const keys = await scanKeys(this.redis, pattern);
-        const failedDeliveries: NotificationDelivery[] = [];
-
-        if (keys.length === 0) return failedDeliveries;
-
-        const deliveries = await this.redis.mget(keys);
-        const now = new Date();
-
-        for (const deliveryData of deliveries) {
-          if (!deliveryData) continue;
-
-          try {
-            const delivery = JSON.parse(deliveryData) as NotificationDelivery;
-
-            // Check if delivery needs retry
-            if (
-              delivery.finalStatus === 'pending' &&
-              delivery.attempts.length > 0
-            ) {
-              const lastAttempt = delivery.attempts[delivery.attempts.length - 1];
-
-              if (
-                lastAttempt.status === 'failed' &&
-                lastAttempt.nextRetryAt &&
-                new Date(lastAttempt.nextRetryAt) <= now
-              ) {
-                failedDeliveries.push(delivery);
-              }
-            }
-          } catch (parseError) {
-            this.logger.error('Error parsing delivery data:', parseError);
-          }
-        }
-
-        return failedDeliveries;
-      },
-      {
-        throwOnError: false,
-        fallbackValue: []
       }
     );
   }

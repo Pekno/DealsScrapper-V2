@@ -20,6 +20,7 @@ const INFRA_DISPLAY: Record<string, { name: string; port: string }> = {
   'redis-test': { name: 'Redis', port: '6380' },
   'elasticsearch-test': { name: 'Elasticsearch', port: '9201' },
   'mailhog-test': { name: 'MailHog', port: '8025' },
+  'ollama-test': { name: 'Ollama', port: '11435' },
 };
 
 export const statusCommand = defineCommand({

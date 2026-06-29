@@ -23,6 +23,7 @@ export const createGamingCategory = (
   avgTemperature: 85.5, // Hot category
   popularBrands: ['HP', 'Lenovo', 'Asus'], // Array field
   isActive: true,
+  isSelectable: true,
   userCount: 150, // High user engagement
   ...overrides,
 });
@@ -45,6 +46,7 @@ export const createHomeCategory = (
   avgTemperature: 65.2, // Warm category
   popularBrands: ['Philips', 'Amazon', 'Google'],
   isActive: true,
+  isSelectable: true,
   userCount: 35, // Moderate user engagement
   ...overrides,
 });
@@ -67,6 +69,7 @@ export const createLowEngagementCategory = (
   avgTemperature: 45.0, // Cool category
   popularBrands: ['Bic', 'Staples', 'Canon'],
   isActive: true,
+  isSelectable: true,
   userCount: 5, // Low user engagement
   ...overrides,
 });
@@ -88,6 +91,7 @@ export const createInactiveCategory = (
   avgTemperature: 0.0,
   popularBrands: [],
   isActive: false, // Inactive category
+  isSelectable: true,
   userCount: 0,
   ...overrides,
 });

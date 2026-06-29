@@ -19,13 +19,10 @@ import { Client, errors as esErrors } from '@elastic/elasticsearch';
 import type { estypes } from '@elastic/elasticsearch';
 import type { PrismaClient } from '@prisma/client';
 import {
-  type FilterExpression,
   type RuleBasedFilterExpression,
   type FilterRule,
   type FilterRuleGroup,
   type LogicalOperator,
-  type FilterOperator,
-  type FilterableField,
   SiteSource,
 } from '@dealscrapper/shared-types';
 import {
@@ -177,9 +174,37 @@ export class ElasticsearchIndexerService implements OnModuleInit {
       await this.ensureIndex();
       this.logger.log('ElasticSearch articles index initialized');
     } catch (error) {
-      this.logger.error('Failed to initialize articles index:', error);
+      this.logger.error(
+        `Failed to initialize articles index: ${this.describeEsError(error)}`,
+      );
       // Don't throw - allow service to start with degraded functionality
     }
+  }
+
+  /**
+   * Build a human-readable description of an error, including the rich detail
+   * that the Elasticsearch client nests under `meta.body.error` for HTTP
+   * responses. The generic `extractErrorMessage` helper only reads
+   * `error.message`, which is empty for many ES `ResponseError`s — losing the
+   * actual rejection reason (e.g. mapping/settings conflicts).
+   */
+  private describeEsError(error: unknown): string {
+    if (error instanceof esErrors.ResponseError) {
+      const body = error.body as
+        | { error?: { type?: string; reason?: string } }
+        | undefined;
+      const esError = body?.error;
+      const detail = esError?.reason
+        ? `${esError.type ?? 'error'}: ${esError.reason}`
+        : JSON.stringify(error.body);
+      return `[ES ${error.statusCode ?? '?'}] ${detail}`;
+    }
+
+    if (error instanceof esErrors.ElasticsearchClientError) {
+      return `[ES ${error.name}] ${error.message}`;
+    }
+
+    return extractErrorMessage(error);
   }
 
   /**
@@ -201,9 +226,8 @@ export class ElasticsearchIndexerService implements OnModuleInit {
         `Indexed article ${article.base.id} from ${article.source}`,
       );
     } catch (error) {
-      const errorMessage = extractErrorMessage(error);
       this.logger.error(
-        `Failed to index article ${article.base.id}: ${errorMessage}`,
+        `Failed to index article ${article.base.id}: ${this.describeEsError(error)}`,
       );
       // Don't throw - indexing failure shouldn't break scraping
     }
@@ -335,8 +359,9 @@ export class ElasticsearchIndexerService implements OnModuleInit {
         this.logger.debug(`Index ${this.indexName} already exists`);
       }
     } catch (error) {
-      const errorMessage = extractErrorMessage(error);
-      this.logger.error(`Failed to ensure index exists: ${errorMessage}`);
+      this.logger.error(
+        `Failed to ensure index exists: ${this.describeEsError(error)}`,
+      );
       throw error;
     }
   }
@@ -620,43 +645,6 @@ export class ElasticsearchIndexerService implements OnModuleInit {
 
     const logic = filter.matchLogic ?? 'AND';
     return this.combineWithLogic(clauses, logic);
-  }
-
-  /**
-   * Legacy FilterExpression conversion (backwards compatible)
-   */
-  private buildElasticsearchQuery(filter: FilterExpression): Record<string, unknown> {
-    // Handle legacy FilterExpression format
-    if (filter.type === 'GROUP' && filter.children) {
-      const clauses = filter.children.map((child) =>
-        this.buildElasticsearchQuery(child),
-      );
-      const logic = filter.operator ?? 'AND';
-      return this.combineWithLogic(clauses, logic as LogicalOperator);
-    }
-
-    if (filter.type === 'CONDITION' && filter.field && filter.comparison) {
-      // Convert legacy comparison to modern operator
-      const operatorMap: Record<string, FilterOperator> = {
-        '>': '>',
-        '<': '<',
-        '=': '=',
-        '>=': '>=',
-        '<=': '<=',
-        'CONTAINS': 'CONTAINS',
-        'REGEX': 'REGEX',
-      };
-      const operator = operatorMap[filter.comparison] ?? '=';
-      // Create a FilterRule from the legacy filter format
-      const legacyRule: FilterRule = {
-        field: filter.field as FilterableField,
-        operator,
-        value: filter.value ?? '',
-      };
-      return this.buildRuleQuery(legacyRule);
-    }
-
-    return { match_all: {} };
   }
 
   /**

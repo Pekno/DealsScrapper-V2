@@ -7,23 +7,68 @@ import { UsersService } from '../../../src/users/users.service';
 import { getQueueToken } from '@nestjs/bull';
 import { UnauthorizedException } from '@nestjs/common';
 import { RegisterDto } from '../../../src/auth/dto/register.dto';
-import { LoginDto } from '../../../src/auth/dto/login.dto';
+import type { User } from '@prisma/client';
+import type {
+  LoginResponse,
+  RegistrationResponse,
+} from '@dealscrapper/shared-types';
 
 describe('AuthController - User Authentication & Account Access', () => {
   let controller: AuthController;
   let authService: AuthService;
 
-  const mockUser = {
+  // Full Omit<User, 'password'> — the shape LocalAuthGuard places on req.user
+  const mockUser: Omit<User, 'password'> = {
     id: 'user-1',
     email: 'test@example.com',
+    role: 'USER',
     createdAt: new Date(),
+    updatedAt: new Date(),
+    emailVerified: true,
+    emailVerifiedAt: null,
+    lastLoginAt: null,
+    loginAttempts: 0,
+    lockedUntil: null,
+    passwordChangedAt: null,
+    firstName: null,
+    lastName: null,
+    timezone: 'UTC',
+    locale: 'en',
+    emailNotifications: true,
+    marketingEmails: false,
+    weeklyDigest: true,
   };
 
-  const mockAuthResponse = {
-    access_token: 'jwt-token',
-    refresh_token: 'refresh-token',
-    expires_in: '15m',
-    user: mockUser,
+  const mockLoginResponse: LoginResponse = {
+    success: true,
+    data: {
+      access_token: 'jwt-token',
+      refresh_token: 'refresh-token',
+      expires_in: '15m',
+      user: {
+        id: 'user-1',
+        email: 'test@example.com',
+        emailVerified: true,
+        role: 'USER',
+        createdAt: new Date(),
+      },
+    },
+  };
+
+  const mockRegistrationResponse: RegistrationResponse = {
+    success: true,
+    message:
+      'Registration successful. Please check your email to verify your account.',
+    data: {
+      user: {
+        id: 'user-1',
+        email: 'test@example.com',
+        emailVerified: false,
+        role: 'USER',
+        createdAt: new Date(),
+      },
+      nextStep: 'verify-email',
+    },
   };
 
   const mockAuthService = {
@@ -57,10 +102,16 @@ describe('AuthController - User Authentication & Account Access', () => {
       controllers: [AuthController],
       providers: [
         { provide: AuthService, useValue: mockAuthService },
-        { provide: EmailVerificationService, useValue: mockEmailVerificationService },
+        {
+          provide: EmailVerificationService,
+          useValue: mockEmailVerificationService,
+        },
         { provide: PasswordResetService, useValue: mockPasswordResetService },
         { provide: UsersService, useValue: mockUsersService },
-        { provide: getQueueToken('notifications'), useValue: mockNotificationQueue },
+        {
+          provide: getQueueToken('notifications'),
+          useValue: mockNotificationQueue,
+        },
       ],
     }).compile();
 
@@ -78,21 +129,16 @@ describe('AuthController - User Authentication & Account Access', () => {
         password: 'StrongP@ssw0rd',
       };
 
-      mockAuthService.register.mockResolvedValue(mockAuthResponse);
+      mockAuthService.register.mockResolvedValue(mockRegistrationResponse);
 
-      const result = await controller.register(
-        registerDto,
-        '127.0.0.1',
-        'test-agent'
-      );
+      const result = await controller.register(registerDto);
 
-      // User Value: Successful account creation with immediate access
-      expect(result.access_token).toBe('jwt-token');
-      expect(result.refresh_token).toBe('refresh-token');
-      expect(result.user.email).toBe('test@example.com');
+      // User Value: Successful account creation with verification flow
+      expect(result.success).toBe(true);
+      expect(result.data.user.email).toBe('test@example.com');
 
-      // User Benefit: Ready to access their personalized deal preferences
-      expect(result.expires_in).toBe('15m');
+      // User Benefit: Clear next step to verify and unlock their account
+      expect(result.data.nextStep).toBe('verify-email');
     });
 
     it('should protect platform from duplicate accounts', async () => {
@@ -106,9 +152,9 @@ describe('AuthController - User Authentication & Account Access', () => {
       );
 
       // User Protection: Prevents account conflicts and security issues
-      await expect(
-        controller.register(registerDto, '127.0.0.1', 'test-agent')
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(controller.register(registerDto)).rejects.toThrow(
+        UnauthorizedException
+      );
     });
   });
 
@@ -116,9 +162,9 @@ describe('AuthController - User Authentication & Account Access', () => {
     it('should provide users secure access to their personalized deal preferences', async () => {
       const mockRequest = {
         user: mockUser,
-      };
+      } as Parameters<typeof controller.login>[0];
 
-      mockAuthService.login.mockResolvedValue(mockAuthResponse);
+      mockAuthService.login.mockResolvedValue(mockLoginResponse);
 
       const result = await controller.login(
         mockRequest,
@@ -127,12 +173,12 @@ describe('AuthController - User Authentication & Account Access', () => {
       );
 
       // User Value: Successful authentication grants access to personalized features
-      expect(result.access_token).toBe('jwt-token');
-      expect(result.refresh_token).toBe('refresh-token');
-      expect(result.user.id).toBe('user-1');
+      expect(result.data?.access_token).toBe('jwt-token');
+      expect(result.data?.refresh_token).toBe('refresh-token');
+      expect(result.data?.user.id).toBe('user-1');
 
       // User Benefit: Can now access saved filters and receive deal notifications
-      expect(result.expires_in).toBeDefined();
+      expect(result.data?.expires_in).toBeDefined();
     });
   });
 
@@ -147,14 +193,18 @@ describe('AuthController - User Authentication & Account Access', () => {
         token: 'reset-token',
         resetUrl: 'https://example.com/reset?token=reset-token',
       });
-      (mockPasswordResetService as any).getConfiguredExpiresIn = jest.fn().mockReturnValue('1h');
+      (mockPasswordResetService as any).getConfiguredExpiresIn = jest
+        .fn()
+        .mockReturnValue('1h');
       mockNotificationQueue.add.mockResolvedValue({});
     });
 
     it('should enqueue a password-reset job with expiresIn for an existing user', async () => {
       (mockUsersService as any).findByEmail.mockResolvedValue(mockFoundUser);
 
-      const result = await controller.forgotPassword({ email: 'test@example.com' });
+      const result = await controller.forgotPassword({
+        email: 'test@example.com',
+      });
 
       // Security: always returns safe response
       expect(result.success).toBe(true);
@@ -168,14 +218,16 @@ describe('AuthController - User Authentication & Account Access', () => {
           resetUrl: 'https://example.com/reset?token=reset-token',
           expiresIn: '1 hour',
         }),
-        expect.any(Object),
+        expect.any(Object)
       );
     });
 
     it('should return safe response without queuing when user is not found', async () => {
       (mockUsersService as any).findByEmail.mockResolvedValue(null);
 
-      const result = await controller.forgotPassword({ email: 'unknown@example.com' });
+      const result = await controller.forgotPassword({
+        email: 'unknown@example.com',
+      });
 
       expect(result.success).toBe(true);
       expect(mockNotificationQueue.add).not.toHaveBeenCalled();
@@ -185,24 +237,31 @@ describe('AuthController - User Authentication & Account Access', () => {
       (mockUsersService as any).findByEmail.mockResolvedValue(mockFoundUser);
 
       // 30 minutes
-      (mockPasswordResetService as any).getConfiguredExpiresIn.mockReturnValue('30m');
-      mockPasswordResetService.generateResetToken.mockReturnValue({ token: 't', resetUrl: 'u' });
+      (mockPasswordResetService as any).getConfiguredExpiresIn.mockReturnValue(
+        '30m'
+      );
+      mockPasswordResetService.generateResetToken.mockReturnValue({
+        token: 't',
+        resetUrl: 'u',
+      });
       await controller.forgotPassword({ email: 'test@example.com' });
       expect(mockNotificationQueue.add).toHaveBeenCalledWith(
         'password-reset',
         expect.objectContaining({ expiresIn: '30 minutes' }),
-        expect.any(Object),
+        expect.any(Object)
       );
 
       mockNotificationQueue.add.mockClear();
 
       // 7 days
-      (mockPasswordResetService as any).getConfiguredExpiresIn.mockReturnValue('7d');
+      (mockPasswordResetService as any).getConfiguredExpiresIn.mockReturnValue(
+        '7d'
+      );
       await controller.forgotPassword({ email: 'test@example.com' });
       expect(mockNotificationQueue.add).toHaveBeenCalledWith(
         'password-reset',
         expect.objectContaining({ expiresIn: '7 days' }),
-        expect.any(Object),
+        expect.any(Object)
       );
     });
   });
@@ -213,8 +272,9 @@ describe('AuthController - User Authentication & Account Access', () => {
         userId: 'cuid123',
       };
 
-      mockEmailVerificationService.resendVerificationEmailByUserId =
-        jest.fn().mockResolvedValue(undefined);
+      mockEmailVerificationService.resendVerificationEmailByUserId = jest
+        .fn()
+        .mockResolvedValue(undefined);
 
       const result = await controller.resendVerificationEmail(resendDto);
 
@@ -235,8 +295,9 @@ describe('AuthController - User Authentication & Account Access', () => {
         userId: 'nonexistent-cuid',
       };
 
-      mockEmailVerificationService.resendVerificationEmailByUserId =
-        jest.fn().mockResolvedValue(undefined);
+      mockEmailVerificationService.resendVerificationEmailByUserId = jest
+        .fn()
+        .mockResolvedValue(undefined);
 
       const result = await controller.resendVerificationEmail(resendDto);
 
@@ -257,8 +318,9 @@ describe('AuthController - User Authentication & Account Access', () => {
         userId: 'verified-cuid',
       };
 
-      mockEmailVerificationService.resendVerificationEmailByUserId =
-        jest.fn().mockResolvedValue(undefined);
+      mockEmailVerificationService.resendVerificationEmailByUserId = jest
+        .fn()
+        .mockResolvedValue(undefined);
 
       const result = await controller.resendVerificationEmail(resendDto);
 
@@ -280,8 +342,9 @@ describe('AuthController - User Authentication & Account Access', () => {
       };
 
       // Service handles errors internally, always returns void
-      mockEmailVerificationService.resendVerificationEmailByUserId =
-        jest.fn().mockResolvedValue(undefined);
+      mockEmailVerificationService.resendVerificationEmailByUserId = jest
+        .fn()
+        .mockResolvedValue(undefined);
 
       const result = await controller.resendVerificationEmail(resendDto);
 

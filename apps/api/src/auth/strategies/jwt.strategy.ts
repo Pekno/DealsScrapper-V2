@@ -3,7 +3,11 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { SharedConfigService } from '@dealscrapper/shared-config';
 import { UsersService } from '../../users/users.service.js';
-import { JwtPayload, AuthenticatedUser, UserRole } from '@dealscrapper/shared-types';
+import {
+  JwtPayload,
+  AuthenticatedUser,
+  UserRole,
+} from '@dealscrapper/shared-types';
 import { createServiceLogger } from '@dealscrapper/shared-logging';
 import { apiLogConfig } from '../../config/logging.config.js';
 

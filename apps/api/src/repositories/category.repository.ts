@@ -281,7 +281,8 @@ export class CategoryRepository
 
     const page = paginationOptions?.page || 1;
     const limit = Math.min(paginationOptions?.limit || 50, 100);
-    const skip = paginationOptions?.offset || calculatePaginationOffset(page, limit);
+    const skip =
+      paginationOptions?.offset || calculatePaginationOffset(page, limit);
 
     const searchFilter: Prisma.CategoryWhereInput = {
       isActive: true, // API only shows active categories
@@ -448,7 +449,12 @@ export class CategoryRepository
     description?: string | null;
   }): Promise<Category> {
     this.validateRequiredFields(
-      { slug: data.slug, name: data.name, siteId: data.siteId, sourceUrl: data.sourceUrl },
+      {
+        slug: data.slug,
+        name: data.name,
+        siteId: data.siteId,
+        sourceUrl: data.sourceUrl,
+      },
       ['slug', 'name', 'siteId', 'sourceUrl']
     );
 
@@ -459,7 +465,10 @@ export class CategoryRepository
       () =>
         this.prisma.category.upsert({
           where: {
-            siteId_sourceUrl: { siteId: data.siteId, sourceUrl: data.sourceUrl },
+            siteId_sourceUrl: {
+              siteId: data.siteId,
+              sourceUrl: data.sourceUrl,
+            },
           },
           create: {
             slug: data.slug,

@@ -402,7 +402,7 @@ describe('Cross-Service Notification Integration', () => {
 
       expect(jobs.length).toBe(3);
       expect(
-        deals.every((deal) => deal.data.dealTitle.includes('Gaming Mouse'))
+        deals.every((deal) => deal.data.dealTitle?.includes('Gaming Mouse'))
       ).toBe(true);
     });
   });

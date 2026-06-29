@@ -48,6 +48,10 @@
     "./article": {
       "types": "./dist/article/index.d.ts",
       "default": "./dist/article/index.js"
+    },
+    "./extractor": {
+      "types": "./dist/extractor.d.ts",
+      "default": "./dist/extractor.js"
     }
   },
   "scripts": {

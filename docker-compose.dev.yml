@@ -68,8 +68,29 @@ services:
       timeout: 5s
       retries: 3
 
+  # Ollama runtime — scraper talks to it directly via 127.0.0.1:11434 in dev
+  ollama:
+    image: ollama/ollama:0.21.1
+    container_name: dev-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_KV_CACHE_TYPE=q8_0
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 
 volumes:
   postgres_data:
   redis_data:
   elasticsearch_data:
+  ollama_data:

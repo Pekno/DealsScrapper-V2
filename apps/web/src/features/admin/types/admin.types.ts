@@ -12,6 +12,7 @@ export interface DashboardMetrics {
   totalFilters: number;
   totalMatches: number;
   activeSessions: number;
+  avgOllamaExtractionTimeMs: number;
 }
 
 export interface DashboardData {
@@ -40,6 +41,14 @@ export interface ScraperScrapingStats {
   avgWaitTime: number;
 }
 
+export interface ScraperLlmStats {
+  totalExtractions: number;
+  successfulExtractions: number;
+  failedExtractions: number;
+  avgExtractionTimeMs: number;
+  lastExtractionTimeMs: number;
+}
+
 export interface ScraperWorker {
   id: string;
   site?: string;
@@ -51,6 +60,7 @@ export interface ScraperWorker {
   lastHeartbeat: string;
   browserPool?: ScraperBrowserPool;
   scraping?: ScraperScrapingStats;
+  llm?: ScraperLlmStats;
 }
 
 export interface SchedulerHealthResponse {

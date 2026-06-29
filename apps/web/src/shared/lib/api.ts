@@ -597,6 +597,10 @@ class ApiClient {
       {
         method: 'GET',
         headers: this.getAuthHeaders(),
+        // Bypass the browser HTTP cache so an edited filter never renders a
+        // stale 304-revalidated body (e.g. showing old matches after the
+        // filter criteria changed to match nothing).
+        cache: 'no-store',
       }
     );
 
@@ -690,6 +694,23 @@ class ApiClient {
 
     return this.handleResponse<
       import('@/features/filters/types/filter.types').Category[]
+    >(response);
+  }
+
+  // Cross-site product suggestions ("also found on") — API Service
+  async getProductSuggestions(
+    articleId: string
+  ): Promise<ApiResponse<import('@dealscrapper/shared-types').ProductSuggestion[]>> {
+    const response = await fetch(
+      `${getApiBaseUrl()}/articles/${articleId}/similar`,
+      {
+        method: 'GET',
+        headers: this.getAuthHeaders(),
+      }
+    );
+
+    return this.handleResponse<
+      import('@dealscrapper/shared-types').ProductSuggestion[]
     >(response);
   }
 

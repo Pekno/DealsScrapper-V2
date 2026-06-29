@@ -7,11 +7,26 @@ import {
 import { Logger } from '@nestjs/common';
 import { Redis } from 'ioredis';
 
+interface MockRedis {
+  zremrangebyscore: jest.Mock;
+  zcard: jest.Mock;
+  zadd: jest.Mock;
+  expire: jest.Mock;
+  ttl: jest.Mock;
+  get: jest.Mock;
+  set: jest.Mock;
+  setex: jest.Mock;
+  del: jest.Mock;
+  keys: jest.Mock;
+  zrangebyscore: jest.Mock;
+  scanStream: jest.Mock;
+}
+
 describe('RateLimitingService - Security Tests', () => {
   let service: RateLimitingService;
-  let mockRedis: jest.Mocked<Redis>;
+  let mockRedis: MockRedis;
 
-  const createMockRedis = () => ({
+  const createMockRedis = (): MockRedis => ({
     zremrangebyscore: jest.fn(),
     zcard: jest.fn(),
     zadd: jest.fn(),
@@ -24,15 +39,15 @@ describe('RateLimitingService - Security Tests', () => {
     keys: jest.fn(),
     zrangebyscore: jest.fn(),
     scanStream: jest.fn(),
-  });;
+  });
 
   beforeEach(async () => {
-    mockRedis = createMockRedis() as jest.Mocked<Redis>;
+    mockRedis = createMockRedis();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         RateLimitingService,
-        { provide: 'REDIS_CLIENT', useValue: mockRedis },
+        { provide: 'REDIS_CLIENT', useValue: mockRedis as unknown as Redis },
       ],
     }).compile();
 

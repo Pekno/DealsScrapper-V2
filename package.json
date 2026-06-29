@@ -28,6 +28,7 @@
     "test:api:unit": "turbo run test:unit --filter=@dealscrapper/api --output-logs=full",
     "test:api:e2e": "turbo run test:e2e --filter=@dealscrapper/api --output-logs=full",
     "test:scraper:unit": "turbo run test:unit --filter=@dealscrapper/scraper --output-logs=full",
+    "test:scraper:llm": "turbo run test:llm --filter=@dealscrapper/scraper --output-logs=full",
     "test:scraper:e2e": "turbo run test:e2e --filter=@dealscrapper/scraper --output-logs=full",
     "test:notifier:unit": "turbo run test:unit --filter=@dealscrapper/notifier --output-logs=full",
     "test:notifier:e2e": "turbo run test:e2e --filter=@dealscrapper/notifier --output-logs=full",

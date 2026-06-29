@@ -55,7 +55,7 @@ export class RequestLoggerMiddleware implements NestMiddleware {
                 : body.message;
               if (detail) {
                 this.logger.warn(
-                  `Response body for ${req.method} ${req.url}: ${detail}`,
+                  `Response body for ${req.method} ${req.url}: ${detail}`
                 );
               }
             } catch {

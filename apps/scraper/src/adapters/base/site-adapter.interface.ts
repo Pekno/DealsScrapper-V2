@@ -24,9 +24,9 @@ export interface ISiteAdapter {
    * Extracts listings from HTML page.
    * @param html - Raw HTML content
    * @param sourceUrl - URL of the scraped page
-   * @returns Array of universal listings with site-specific data
+   * @returns Listings and total LLM extraction time in ms (0 for non-LLM adapters)
    */
-  extractListings(html: string, sourceUrl: string): UniversalListing[];
+  extractListings(html: string, sourceUrl: string): Promise<{ listings: UniversalListing[]; llmTimeMs: number }>;
 
   /**
    * Builds category URL for scraping.
@@ -70,7 +70,7 @@ export interface UniversalListing {
   readonly originalPrice: number | null;
   readonly merchant: string | null;
   readonly location: string | null;
-  readonly publishedAt: Date;
+  readonly publishedAt: Date | null;
   readonly isActive: boolean;
   readonly categorySlug: string;
   readonly siteSpecificData: SiteSpecificData;
@@ -80,8 +80,8 @@ export type SiteSpecificData = DealabsData | VintedData | LeBonCoinData;
 
 export interface DealabsData {
   type: typeof SiteSource.DEALABS;
-  temperature: number;
-  commentCount: number;
+  temperature: number | null;
+  commentCount: number | null;
   communityVerified: boolean;
   freeShipping: boolean;
   isCoupon: boolean;
@@ -91,8 +91,8 @@ export interface DealabsData {
 
 export interface VintedData {
   type: typeof SiteSource.VINTED;
-  favoriteCount: number;
-  viewCount: number;
+  favoriteCount: number | null;
+  viewCount: number | null;
   itemCondition: string;
   brand: string | null;
   size: string | null;
@@ -107,10 +107,10 @@ export interface LeBonCoinData {
   postcode: string | null;
   department: string | null;
   region: string | null;
-  proSeller: boolean;
+  proSeller: boolean | null;
   sellerName: string | null;
-  urgentFlag: boolean;
-  topAnnonce: boolean;
+  urgentFlag: boolean | null;
+  topAnnonce: boolean | null;
   deliveryOptions: string[];
   shippingCost: number | null;
   condition: string | null;

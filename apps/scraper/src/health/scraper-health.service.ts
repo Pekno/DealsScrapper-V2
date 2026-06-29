@@ -11,6 +11,9 @@ import {
 } from '@dealscrapper/shared-health';
 import { PrismaService } from '@dealscrapper/database';
 import { PuppeteerPoolService } from '../puppeteer-pool/puppeteer-pool.service.js';
+import { OllamaService } from '../llm-extraction/ollama/ollama.service.js';
+import { OllamaUnavailableError } from '../llm-extraction/ollama/ollama.errors.js';
+import { LlmExtractionService } from '../llm-extraction/llm-extraction.service.js';
 
 /**
  * Custom health service for scraper with service-specific health checks
@@ -21,7 +24,9 @@ export class ScraperHealthService extends BaseHealthService {
   constructor(
     private readonly puppeteerPool: PuppeteerPoolService,
     private readonly prisma: PrismaService,
-    private readonly sharedConfig: SharedConfigService
+    private readonly sharedConfig: SharedConfigService,
+    private readonly ollamaService: OllamaService,
+    private readonly llmExtraction: LlmExtractionService
   ) {
     super({
       serviceName: 'scraper',
@@ -34,6 +39,7 @@ export class ScraperHealthService extends BaseHealthService {
     this.registerHealthChecker('puppeteerPool', () =>
       this.checkPuppeteerPool()
     );
+    this.registerHealthChecker('ollama', () => this.checkOllama());
   }
 
   /**
@@ -42,6 +48,8 @@ export class ScraperHealthService extends BaseHealthService {
    */
   protected async getCustomHealthData(): Promise<Record<string, unknown>> {
     const poolStats = this.puppeteerPool.getStats();
+    const ollamaStatus = await this.checkOllama();
+    const llmStats = this.llmExtraction.getStats();
 
     return {
       puppeteerPool: {
@@ -64,6 +72,14 @@ export class ScraperHealthService extends BaseHealthService {
       performance: {
         successRate: await this.getSuccessRate(),
         errorRate: await this.getErrorRate(),
+      },
+      ollama: ollamaStatus,
+      llm: {
+        totalExtractions: llmStats.totalExtractions,
+        successfulExtractions: llmStats.successfulExtractions,
+        failedExtractions: llmStats.failedExtractions,
+        avgExtractionTimeMs: llmStats.avgExtractionTimeMs,
+        lastExtractionTimeMs: llmStats.lastExtractionTimeMs,
       },
     };
   }
@@ -112,6 +128,25 @@ export class ScraperHealthService extends BaseHealthService {
       return 'healthy';
     } catch (error) {
       this.logger.error('Puppeteer pool health check failed:', error);
+      return 'unhealthy';
+    }
+  }
+
+  /**
+   * Check Ollama connectivity and model availability.
+   * Reports healthy if the configured model is present, degraded if Ollama is
+   * reachable but the model is missing, unhealthy if Ollama is unreachable.
+   */
+  private async checkOllama(): Promise<DependencyStatus> {
+    try {
+      const models = await this.ollamaService.listModels();
+      const configuredModel = this.sharedConfig.getOllamaConfig().model;
+      const isPresent = models.some((m) => m === configuredModel || m.startsWith(configuredModel));
+      return isPresent ? 'healthy' : 'degraded';
+    } catch (err) {
+      if (err instanceof OllamaUnavailableError) {
+        return 'unhealthy';
+      }
       return 'unhealthy';
     }
   }

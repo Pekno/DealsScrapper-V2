@@ -6,9 +6,20 @@ import { UserStatusService } from '../../../src/services/user-status.service.js'
 import { NotificationPreferencesService } from '../../../src/services/notification-preferences.service.js';
 import { DeliveryTrackingService } from '../../../src/services/delivery-tracking.service.js';
 import { EmailService } from '../../../src/channels/email.service.js';
-import { TemplateService } from '../../../src/templates/template.service.js';
 import { ChannelHealthService } from '../../../src/services/channel-health.service.js';
 import { PrismaService } from '@dealscrapper/database';
+
+/**
+ * Structural mock of the Prisma delegates used by the processor. The generated
+ * Prisma delegate methods are complex generic function types that `jest.Mocked`
+ * cannot deeply traverse, so the nested methods are typed explicitly as
+ * `jest.Mock`.
+ */
+type MockPrismaService = {
+  user: Record<'findUnique', jest.Mock>;
+  filter: Record<'findUnique', jest.Mock>;
+  notification: Record<'create' | 'update', jest.Mock>;
+};
 
 describe('NotificationProcessor', () => {
   let processor: NotificationProcessor;
@@ -16,7 +27,7 @@ describe('NotificationProcessor', () => {
   let preferencesService: jest.Mocked<NotificationPreferencesService>;
   let deliveryTracking: jest.Mocked<DeliveryTrackingService>;
   let emailService: jest.Mocked<EmailService>;
-  let prismaService: jest.Mocked<PrismaService>;
+  let prismaService: MockPrismaService;
 
   beforeEach(async () => {
     const mockGateway = {
@@ -39,7 +50,9 @@ describe('NotificationProcessor', () => {
     };
 
     const mockDeliveryTracking = {
-      createDelivery: jest.fn().mockResolvedValue('delivery-123'),
+      createDelivery: jest
+        .fn()
+        .mockResolvedValue({ deliveryId: 'delivery-123', deduplicated: false }),
       recordAttempt: jest.fn().mockResolvedValue(undefined),
       scheduleRetry: jest.fn().mockResolvedValue(undefined),
       getDelivery: jest.fn().mockResolvedValue({ id: 'delivery-123', attempts: [] }),
@@ -49,11 +62,6 @@ describe('NotificationProcessor', () => {
       sendEmail: jest.fn().mockResolvedValue(true),
       sendPasswordReset: jest.fn().mockResolvedValue(true),
       getProviderStatus: jest.fn().mockReturnValue({ configured: true, healthy: true }),
-    };
-
-    const mockTemplateService = {
-      render: jest.fn().mockReturnValue('<html>Email</html>'),
-      getTemplate: jest.fn().mockReturnValue({ subject: 'Test', body: 'Test body' }),
     };
 
     const mockChannelHealth = {
@@ -91,7 +99,6 @@ describe('NotificationProcessor', () => {
         { provide: NotificationPreferencesService, useValue: mockPreferencesService },
         { provide: DeliveryTrackingService, useValue: mockDeliveryTracking },
         { provide: EmailService, useValue: mockEmailService },
-        { provide: TemplateService, useValue: mockTemplateService },
         { provide: ChannelHealthService, useValue: mockChannelHealth },
         { provide: PrismaService, useValue: mockPrisma },
       ],
@@ -102,7 +109,7 @@ describe('NotificationProcessor', () => {
     preferencesService = module.get(NotificationPreferencesService);
     deliveryTracking = module.get(DeliveryTrackingService);
     emailService = module.get(EmailService);
-    prismaService = module.get(PrismaService);
+    prismaService = module.get(PrismaService) as unknown as MockPrismaService;
 
     jest.spyOn(Logger.prototype, 'log').mockImplementation();
     jest.spyOn(Logger.prototype, 'error').mockImplementation();
@@ -180,6 +187,26 @@ describe('NotificationProcessor', () => {
 
       // Should not send via any channel
       expect(websocketGateway.sendToUser).not.toHaveBeenCalled();
+    });
+
+    it('should not re-send when the delivery was deduplicated (retried/re-detected job)', async () => {
+      // Arrange: allowed, but createDelivery reports an existing (already-delivered) row
+      preferencesService.shouldSendNotification.mockResolvedValue({
+        allowed: true,
+        channels: ['websocket', 'email'],
+      });
+      deliveryTracking.createDelivery.mockResolvedValue({
+        deliveryId: 'existing-delivery-1',
+        deduplicated: true,
+      });
+
+      // Act
+      await processor.handleDealMatch(mockJob as any);
+
+      // Assert: dedup short-circuits before any channel send or attempt record
+      expect(deliveryTracking.createDelivery).toHaveBeenCalled();
+      expect(websocketGateway.sendToUser).not.toHaveBeenCalled();
+      expect(deliveryTracking.recordAttempt).not.toHaveBeenCalled();
     });
   });
 
@@ -262,34 +289,6 @@ describe('NotificationProcessor', () => {
 
       jest.restoreAllMocks();
     }, 15000);
-  });
-
-  describe('handleSystemNotification()', () => {
-    const mockSystemJob = {
-      id: 'job-456',
-      data: {
-        userId: 'user-123',
-        subject: 'System Alert',
-        message: 'Important system message',
-        priority: 'high',
-        type: 'info',
-      },
-      attemptsMade: 0,
-      opts: {},
-    };
-
-    it('should process system notification and create delivery', async () => {
-      await processor.handleSystemNotification(mockSystemJob as any);
-
-      // System notifications skip preference check and create delivery directly
-      expect(deliveryTracking.createDelivery).toHaveBeenCalled();
-    });
-
-    it('should send via websocket when user is online', async () => {
-      await processor.handleSystemNotification(mockSystemJob as any);
-
-      expect(websocketGateway.sendToUser).toHaveBeenCalled();
-    });
   });
 
   describe('Error Handling', () => {

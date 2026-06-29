@@ -2,12 +2,39 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
 import { DeliveryTrackingService } from '../../../src/services/delivery-tracking.service.js';
 import { PrismaService } from '@dealscrapper/database';
-import Redis from 'ioredis';
+import { SiteSource } from '@dealscrapper/shared-types';
+
+/**
+ * Structural mock of the Prisma delegate methods used by DeliveryTrackingService.
+ * `jest.Mocked<PrismaService>` cannot traverse Prisma's generic delegate function
+ * types, so the nested `.mockResolvedValue` helpers are not visible. Typing the
+ * nested methods as `jest.Mock` exposes the jest mock API while keeping DI intact.
+ */
+type MockedPrisma = {
+  notification: Record<
+    | 'findMany'
+    | 'findUnique'
+    | 'findFirst'
+    | 'create'
+    | 'update'
+    | 'updateMany'
+    | 'delete'
+    | 'count'
+    | 'deleteMany',
+    jest.Mock
+  >;
+  deliveryAttempt: Record<'create' | 'findMany' | 'count', jest.Mock>;
+};
+
+type MockedRedis = Record<
+  'set' | 'setex' | 'get' | 'del' | 'keys' | 'expire' | 'zadd' | 'zrangebyscore' | 'zrem',
+  jest.Mock
+>;
 
 describe('DeliveryTrackingService', () => {
   let service: DeliveryTrackingService;
-  let prismaService: jest.Mocked<PrismaService>;
-  let redisClient: jest.Mocked<Redis>;
+  let prismaService: MockedPrisma;
+  let redisClient: MockedRedis;
 
   const mockNotification = {
     id: 'notification-123',
@@ -26,10 +53,11 @@ describe('DeliveryTrackingService', () => {
   };
 
   beforeEach(async () => {
-    const mockPrisma = {
+    const mockPrisma: MockedPrisma = {
       notification: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
@@ -44,7 +72,7 @@ describe('DeliveryTrackingService', () => {
       },
     };
 
-    const mockRedis = {
+    const mockRedis: MockedRedis = {
       set: jest.fn().mockResolvedValue('OK'),
       setex: jest.fn().mockResolvedValue('OK'),
       get: jest.fn(),
@@ -65,8 +93,8 @@ describe('DeliveryTrackingService', () => {
     }).compile();
 
     service = module.get<DeliveryTrackingService>(DeliveryTrackingService);
-    prismaService = module.get(PrismaService);
-    redisClient = module.get('REDIS_CLIENT');
+    prismaService = module.get<MockedPrisma>(PrismaService);
+    redisClient = module.get<MockedRedis>('REDIS_CLIENT');
 
     jest.spyOn(Logger.prototype, 'log').mockImplementation();
     jest.spyOn(Logger.prototype, 'error').mockImplementation();
@@ -82,7 +110,16 @@ describe('DeliveryTrackingService', () => {
       const deliveryData = {
         userId: 'user-123',
         type: 'deal-match' as const,
-        notificationPayload: { dealId: 'deal-123' },
+        notificationPayload: {
+          id: 'notif_payload_1',
+          siteId: SiteSource.DEALABS,
+          type: 'DEAL_MATCH' as const,
+          title: 'Great deal',
+          message: 'A deal matched your filter',
+          data: { dealData: { title: 'Great deal', url: 'https://example.com/deal' } },
+          timestamp: '2024-01-15T10:00:00Z',
+          read: false,
+        },
         priority: 'normal' as const,
       };
 
@@ -90,8 +127,162 @@ describe('DeliveryTrackingService', () => {
 
       const result = await service.createDelivery(deliveryData);
 
-      expect(result).toBeDefined();
+      expect(result.deliveryId).toBeDefined();
+      expect(result.deduplicated).toBe(false);
       expect(prismaService.notification.create).toHaveBeenCalled();
+    });
+
+    it('should skip create and return existing id for duplicate (userId, matchId)', async () => {
+      // Arrange: a retried job carrying the same matchId; an existing row is found
+      const deliveryData = {
+        userId: 'user-123',
+        type: 'deal-match' as const,
+        notificationPayload: {
+          id: 'notif_payload_2',
+          siteId: SiteSource.DEALABS,
+          type: 'DEAL_MATCH' as const,
+          title: 'Great deal',
+          message: 'A deal matched your filter',
+          matchId: 'match-456',
+          data: { dealData: { title: 'Great deal', url: 'https://example.com/deal' } },
+          timestamp: '2024-01-15T10:00:00Z',
+          read: false,
+        },
+        priority: 'normal' as const,
+      };
+
+      const existing = { ...mockNotification, id: 'existing-notif-1', matchId: 'match-456' };
+      prismaService.notification.findFirst.mockResolvedValue(existing);
+
+      // Act
+      const result = await service.createDelivery(deliveryData);
+
+      // Assert: returns existing id, flags dedup, and does NOT re-create
+      expect(result.deliveryId).toBe('existing-notif-1');
+      expect(result.deduplicated).toBe(true);
+      expect(prismaService.notification.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'user-123', matchId: 'match-456' },
+      });
+      expect(prismaService.notification.create).not.toHaveBeenCalled();
+    });
+
+    it('should deliver BOTH initial match and price-drop sharing a matchId but differing dedupKey', async () => {
+      // Arrange: same matchId, different dedupKeys (initial match vs price drop).
+      // No existing row matches either dedupKey, so both must create.
+      const basePayload = {
+        id: 'notif_payload_match',
+        siteId: SiteSource.DEALABS,
+        type: 'DEAL_MATCH' as const,
+        title: 'Great deal',
+        message: 'A deal matched your filter',
+        matchId: 'match-789',
+        data: { dealData: { title: 'Great deal', url: 'https://example.com/deal' } },
+        timestamp: '2024-01-15T10:00:00Z',
+        read: false,
+      };
+
+      const initialMatch = {
+        userId: 'user-123',
+        type: 'deal-match' as const,
+        notificationPayload: { ...basePayload, dedupKey: 'deal-match-match-789' },
+        priority: 'normal' as const,
+      };
+      const priceDrop = {
+        userId: 'user-123',
+        type: 'deal-match' as const,
+        notificationPayload: { ...basePayload, dedupKey: 'deal-match-match-789-drop-599' },
+        priority: 'normal' as const,
+      };
+
+      prismaService.notification.findFirst.mockResolvedValue(null);
+      prismaService.notification.create.mockResolvedValue(mockNotification);
+
+      // Act
+      const initialId = await service.createDelivery(initialMatch);
+      const dropId = await service.createDelivery(priceDrop);
+
+      // Assert: dedup queried on (userId, dedupKey), both delivered (created)
+      expect(prismaService.notification.findFirst).toHaveBeenNthCalledWith(1, {
+        where: { userId: 'user-123', dedupKey: 'deal-match-match-789' },
+      });
+      expect(prismaService.notification.findFirst).toHaveBeenNthCalledWith(2, {
+        where: { userId: 'user-123', dedupKey: 'deal-match-match-789-drop-599' },
+      });
+      expect(prismaService.notification.create).toHaveBeenCalledTimes(2);
+      expect(initialId.deliveryId).toBeDefined();
+      expect(initialId.deduplicated).toBe(false);
+      expect(dropId.deliveryId).toBeDefined();
+      expect(dropId.deduplicated).toBe(false);
+    });
+
+    it('should dedup a re-detected price drop sharing the same dedupKey', async () => {
+      // Arrange: the same drop is re-detected -> same dedupKey -> existing row found
+      const priceDrop = {
+        userId: 'user-123',
+        type: 'deal-match' as const,
+        notificationPayload: {
+          id: 'notif_payload_drop',
+          siteId: SiteSource.DEALABS,
+          type: 'DEAL_MATCH' as const,
+          title: 'Great deal',
+          message: 'Price dropped',
+          matchId: 'match-789',
+          dedupKey: 'deal-match-match-789-drop-599',
+          data: { dealData: { title: 'Great deal', url: 'https://example.com/deal' } },
+          timestamp: '2024-01-15T10:00:00Z',
+          read: false,
+        },
+        priority: 'normal' as const,
+      };
+
+      const existing = {
+        ...mockNotification,
+        id: 'existing-drop-1',
+        matchId: 'match-789',
+        dedupKey: 'deal-match-match-789-drop-599',
+      };
+      prismaService.notification.findFirst.mockResolvedValue(existing);
+
+      // Act
+      const result = await service.createDelivery(priceDrop);
+
+      // Assert: deduped on dedupKey, returns existing id, flags dedup, no re-create
+      expect(result.deliveryId).toBe('existing-drop-1');
+      expect(result.deduplicated).toBe(true);
+      expect(prismaService.notification.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'user-123', dedupKey: 'deal-match-match-789-drop-599' },
+      });
+      expect(prismaService.notification.create).not.toHaveBeenCalled();
+    });
+
+    it('should always create for null-dedupKey SYSTEM notifications without dedup query', async () => {
+      // Arrange: SYSTEM payload carries neither matchId nor dedupKey
+      const systemDelivery = {
+        userId: 'user-123',
+        type: 'verification' as const,
+        notificationPayload: {
+          id: 'notif_payload_system',
+          siteId: SiteSource.DEALABS,
+          type: 'SYSTEM' as const,
+          title: 'Verify your email address',
+          message: 'Please verify your account',
+          data: { email: 'user@example.com' },
+          timestamp: '2024-01-15T10:00:00Z',
+          read: false,
+        },
+        priority: 'high' as const,
+      };
+
+      prismaService.notification.create.mockResolvedValue(mockNotification);
+
+      // Act
+      const result = await service.createDelivery(systemDelivery);
+
+      // Assert: no dedup query, row always created
+      expect(prismaService.notification.findFirst).not.toHaveBeenCalled();
+      expect(prismaService.notification.create).toHaveBeenCalledTimes(1);
+      expect(result.deliveryId).toBeDefined();
+      expect(result.deduplicated).toBe(false);
     });
   });
 
@@ -206,7 +397,7 @@ describe('DeliveryTrackingService', () => {
     it('should delete old delivery records', async () => {
       prismaService.notification.deleteMany.mockResolvedValue({ count: 10 });
 
-      await service.cleanupOldDeliveries(30);
+      await service.cleanupOldDeliveries();
 
       expect(prismaService.notification.deleteMany).toHaveBeenCalled();
     });
@@ -219,13 +410,4 @@ describe('DeliveryTrackingService', () => {
     });
   });
 
-  describe('getFailedDeliveriesForRetry()', () => {
-    it('should return empty array when no retries needed', async () => {
-      redisClient.zrangebyscore.mockResolvedValue([]);
-
-      const result = await service.getFailedDeliveriesForRetry();
-
-      expect(result).toEqual([]);
-    });
-  });
 });

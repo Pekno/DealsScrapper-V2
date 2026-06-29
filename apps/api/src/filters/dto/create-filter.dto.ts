@@ -10,7 +10,10 @@ import {
   IsObject,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { RuleBasedFilterExpressionDto, type FilterExpressionInput } from '../types/rule-based-filter.types.js';
+import {
+  RuleBasedFilterExpressionDto,
+  type FilterExpressionInput,
+} from '../types/rule-based-filter.types.js';
 import { ValidateSiteSpecificFields } from '../validation/validate-site-fields.decorator.js';
 
 export type DigestFrequency = 'hourly' | 'daily' | 'weekly' | 'disabled';
@@ -41,7 +44,8 @@ export class CreateFilterDto {
   active?: boolean = true;
 
   @ApiProperty({
-    description: 'List of category IDs to monitor for deals. Sites are derived from categories.',
+    description:
+      'List of category IDs to monitor for deals. Sites are derived from categories.',
     example: ['cldx123abc', 'cldx456def'],
     type: [String],
   })
@@ -109,7 +113,6 @@ export class CreateFilterDto {
       ],
       matchLogic: 'AND',
       minScore: 75,
-      scoreMode: 'weighted',
     },
   })
   @IsObject()

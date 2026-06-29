@@ -71,8 +71,10 @@ import { DatabaseSeederService } from './common/services/database-seeder.service
       }),
       inject: [SharedConfigService],
       healthServiceFactory: {
-        useFactory: (prisma: PrismaService, sharedConfig: SharedConfigService) =>
-          new ApiHealthService(prisma, null, sharedConfig),
+        useFactory: (
+          prisma: PrismaService,
+          sharedConfig: SharedConfigService
+        ) => new ApiHealthService(prisma, null, sharedConfig),
         inject: [PrismaService, SharedConfigService],
       },
     }),

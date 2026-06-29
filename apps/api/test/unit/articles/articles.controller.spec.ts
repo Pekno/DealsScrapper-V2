@@ -2,7 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ArticlesController } from '../../../src/articles/articles.controller';
 import { ArticlesService } from '../../../src/articles/articles.service';
 import { SearchArticlesDto } from '../../../src/articles/dto/search-articles.dto';
-import { ArticleListResponseDto, ArticleResponseDto } from '../../../src/articles/dto/article-response.dto';
+import {
+  ArticleListResponseDto,
+  ArticleResponseDto,
+} from '../../../src/articles/dto/article-response.dto';
 import { SiteSource } from '@dealscrapper/shared-types/article';
 
 describe('ArticlesController - Article Search API', () => {
@@ -117,8 +120,8 @@ describe('ArticlesController - Article Search API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Articles retrieved successfully');
-      expect(result.data.articles).toHaveLength(2);
-      expect(result.data.total).toBe(2);
+      expect(result.data!.articles).toHaveLength(2);
+      expect(result.data!.total).toBe(2);
       expect(mockArticlesService.search).toHaveBeenCalledWith(searchDto);
     });
 
@@ -138,8 +141,8 @@ describe('ArticlesController - Article Search API', () => {
 
       // Assert
       expect(result.success).toBe(true);
-      expect(result.data.articles).toHaveLength(0);
-      expect(result.data.total).toBe(0);
+      expect(result.data!.articles).toHaveLength(0);
+      expect(result.data!.total).toBe(0);
     });
 
     it('should pass site filters to service', async () => {
@@ -156,7 +159,7 @@ describe('ArticlesController - Article Search API', () => {
       expect(mockArticlesService.search).toHaveBeenCalledWith(
         expect.objectContaining({
           sites: [SiteSource.DEALABS, SiteSource.VINTED],
-        }),
+        })
       );
     });
 
@@ -176,7 +179,7 @@ describe('ArticlesController - Article Search API', () => {
         expect.objectContaining({
           priceMin: 50,
           priceMax: 500,
-        }),
+        })
       );
     });
 
@@ -198,7 +201,7 @@ describe('ArticlesController - Article Search API', () => {
           dealabs_temperatureMin: 100,
           dealabs_communityVerified: true,
           dealabs_freeShipping: true,
-        }),
+        })
       );
     });
 
@@ -220,7 +223,7 @@ describe('ArticlesController - Article Search API', () => {
           vinted_brand: 'Nike',
           vinted_size: '42',
           vinted_condition: 'new_with_tags',
-        }),
+        })
       );
     });
 
@@ -240,7 +243,7 @@ describe('ArticlesController - Article Search API', () => {
         expect.objectContaining({
           from: 20,
           size: 50,
-        }),
+        })
       );
     });
   });
@@ -256,8 +259,8 @@ describe('ArticlesController - Article Search API', () => {
       // Assert
       expect(result.success).toBe(true);
       expect(result.message).toBe('Article retrieved successfully');
-      expect(result.data.base.id).toBe('article-1');
-      expect(result.data.source).toBe(SiteSource.DEALABS);
+      expect(result.data!.base.id).toBe('article-1');
+      expect(result.data!.source).toBe(SiteSource.DEALABS);
       expect(mockArticlesService.getById).toHaveBeenCalledWith('article-1');
     });
 
@@ -270,17 +273,21 @@ describe('ArticlesController - Article Search API', () => {
 
       // Assert
       expect(result.success).toBe(true);
-      expect(result.data.source).toBe(SiteSource.VINTED);
-      expect(result.data.vintedExtension).toBeDefined();
-      expect(result.data.vintedExtension?.brand).toBe('Nike');
+      expect(result.data!.source).toBe(SiteSource.VINTED);
+      expect(result.data!.vintedExtension).toBeDefined();
+      expect(result.data!.vintedExtension?.brand).toBe('Nike');
     });
 
     it('should propagate service errors', async () => {
       // Arrange
-      mockArticlesService.getById.mockRejectedValue(new Error('Article not found'));
+      mockArticlesService.getById.mockRejectedValue(
+        new Error('Article not found')
+      );
 
       // Act & Assert
-      await expect(controller.getById('nonexistent')).rejects.toThrow('Article not found');
+      await expect(controller.getById('nonexistent')).rejects.toThrow(
+        'Article not found'
+      );
     });
   });
 });

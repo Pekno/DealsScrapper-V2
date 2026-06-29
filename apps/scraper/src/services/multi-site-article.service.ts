@@ -12,11 +12,15 @@
  * 4. Indexes to Elasticsearch
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@dealscrapper/database';
+import { createServiceLogger } from '@dealscrapper/shared-logging';
 import { ArticleWrapper, SiteSource } from '@dealscrapper/shared-types/article';
 import type { Article, Prisma } from '@dealscrapper/database';
+import { scraperLogConfig } from '../config/logging.config.js';
+import { DealProcessingUtils, type PriceDrop } from '../common/deal-processing.utils.js';
 import { ElasticsearchIndexerService } from '../elasticsearch/services/elasticsearch-indexer.service.js';
+import { NotificationService } from '../notification/notification.service.js';
 import type {
   UniversalListing,
   DealabsData,
@@ -40,11 +44,12 @@ export interface BulkCreationResult {
 
 @Injectable()
 export class MultiSiteArticleService {
-  private readonly logger = new Logger(MultiSiteArticleService.name);
+  private readonly logger = createServiceLogger(scraperLogConfig);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly elasticsearchIndexer: ElasticsearchIndexerService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -65,6 +70,14 @@ export class MultiSiteArticleService {
 
         // Create site-specific extension
         await this.createExtension(tx, baseArticle.id, listing);
+
+        // First price observation: no previous price on create
+        await this.recordPriceObservation(
+          tx,
+          baseArticle.id,
+          listing.currentPrice,
+          null,
+        );
 
         return baseArticle;
       });
@@ -116,86 +129,65 @@ export class MultiSiteArticleService {
   }
 
   /**
-   * Creates multiple articles from listings with bulk Elasticsearch indexing.
+   * Creates or updates many articles from listings.
+   *
+   * Each listing is routed through `upsertFromListing`, so an EXISTING article is
+   * refreshed (price/temperature + change-gated PriceObservation + drop-detection
+   * alerts) rather than skipped. New and updated articles are bucketed separately
+   * so the caller can still run filter-matching on both sets (existing[] keeps the
+   * updated articles, no regression there). Each upsert indexes its own article to
+   * Elasticsearch internally, so there is no separate bulk-index pass.
    */
   async createManyFromListings(
     listings: UniversalListing[],
     categoryId: string,
   ): Promise<BulkCreationResult> {
     const created: Article[] = [];
-    const existing: Article[] = []; // Track existing articles for filter matching
+    const existing: Article[] = []; // Updated existing articles, still filter-matched
     const errors: string[] = [];
-    let skipped = 0;
+    let indexed = 0;
 
-    // Process each listing
     for (const listing of listings) {
       try {
-        // Check if article already exists
-        const existingArticle = await this.prisma.article.findFirst({
-          where: {
-            siteId: listing.siteId,
-            externalId: listing.externalId,
-          },
-        });
+        const alreadyExisted = await this.articleExists(listing);
 
-        if (existingArticle) {
-          skipped++;
-          existing.push(existingArticle); // Add to existing list for filter matching
-          continue;
+        const result = await this.upsertFromListing(listing, categoryId);
+
+        if (alreadyExisted) {
+          existing.push(result.article);
+        } else {
+          created.push(result.article);
         }
-
-        const result = await this.createFromListing(listing, categoryId);
-        created.push(result.article);
+        if (result.indexed) {
+          indexed++;
+        }
       } catch (error) {
-        // Handle race condition: another concurrent job may have created the same article
-        // between our findFirst check and the create call
-        if (
-          error &&
-          typeof error === 'object' &&
-          'code' in error &&
-          error.code === 'P2002'
-        ) {
-          const raceExisting = await this.prisma.article.findFirst({
-            where: {
-              siteId: listing.siteId,
-              externalId: listing.externalId,
-            },
-          });
-          if (raceExisting) {
-            skipped++;
-            existing.push(raceExisting);
-          }
-          continue;
-        }
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         errors.push(`${listing.externalId}: ${errorMessage}`);
       }
     }
 
-    // Bulk index all created articles
-    let indexed = 0;
-    if (created.length > 0) {
-      try {
-        const wrappers = await ArticleWrapper.loadMany(
-          created.map((a) => a.id),
-          this.prisma,
-        );
-        const bulkResult = await this.elasticsearchIndexer.bulkIndex(wrappers);
-        indexed = bulkResult.items.filter(
-          (item: { index?: { error?: unknown } }) => !item.index?.error
-        ).length;
-        this.logger.log(
-          `Bulk indexed ${indexed}/${created.length} articles to Elasticsearch`,
-        );
-      } catch (esError) {
-        this.logger.warn(
-          `Bulk Elasticsearch indexing failed: ${String(esError)}`,
-        );
-      }
-    }
+    this.logger.log(
+      `Upserted ${listings.length} listings: ${created.length} created, ` +
+        `${existing.length} updated, ${indexed} indexed to Elasticsearch`,
+    );
 
-    return { created, existing, indexed, skipped, errors };
+    return { created, existing, indexed, skipped: 0, errors };
+  }
+
+  /**
+   * Returns whether a base article already exists for this listing's
+   * (siteId, externalId). Used to bucket an upsert result as created vs updated.
+   */
+  private async articleExists(listing: UniversalListing): Promise<boolean> {
+    const existing = await this.prisma.article.findFirst({
+      where: {
+        siteId: listing.siteId,
+        externalId: listing.externalId,
+      },
+    });
+    return existing !== null;
   }
 
   /**
@@ -216,7 +208,12 @@ export class MultiSiteArticleService {
 
       if (existing) {
         // Update existing article
-        return await this.updateFromListing(existing.id, listing, categoryId);
+        return await this.updateFromListing(
+          existing.id,
+          listing,
+          categoryId,
+          existing.currentPrice,
+        );
       }
 
       // Create new article
@@ -236,7 +233,12 @@ export class MultiSiteArticleService {
           },
         });
         if (raceExisting) {
-          return await this.updateFromListing(raceExisting.id, listing, categoryId);
+          return await this.updateFromListing(
+            raceExisting.id,
+            listing,
+            categoryId,
+            raceExisting.currentPrice,
+          );
         }
       }
       const errorMessage =
@@ -255,8 +257,9 @@ export class MultiSiteArticleService {
     articleId: string,
     listing: UniversalListing,
     categoryId: string,
+    previousPrice: number | null,
   ): Promise<ArticleCreationResult> {
-    const article = await this.prisma.$transaction(async (tx) => {
+    const { article, drop } = await this.prisma.$transaction(async (tx) => {
       // Update base article
       const updatedArticle = await tx.article.update({
         where: { id: articleId },
@@ -275,8 +278,28 @@ export class MultiSiteArticleService {
       // Update extension
       await this.updateExtension(tx, articleId, listing);
 
-      return updatedArticle;
+      // Append a price observation only when the price actually changed
+      const drop = await this.recordPriceObservation(
+        tx,
+        articleId,
+        listing.currentPrice,
+        previousPrice,
+      );
+
+      return { article: updatedArticle, drop };
     });
+
+    // Phase 6: price dropped -> fire throttled alerts to existing matches.
+    // Post-commit and best-effort: a drop alert must never break the scrape.
+    if (drop) {
+      try {
+        await this.notificationService.queuePriceDropAlerts(articleId, drop);
+      } catch (alertError) {
+        this.logger.warn(
+          `Failed to queue price-drop alerts for ${articleId}: ${String(alertError)}`,
+        );
+      }
+    }
 
     // Re-index to Elasticsearch
     let indexed = false;
@@ -291,6 +314,33 @@ export class MultiSiteArticleService {
     }
 
     return { article, indexed };
+  }
+
+  /**
+   * Append-only, change-gated price history (PriceGhost style): insert a
+   * PriceObservation only when the price is known and differs from the last
+   * recorded price. Article.currentPrice remains the fast-read "latest".
+   */
+  private async recordPriceObservation(
+    tx: Prisma.TransactionClient,
+    articleId: string,
+    newPrice: number | null,
+    previousPrice: number | null,
+  ): Promise<PriceDrop | null> {
+    if (newPrice == null) return null; // no price, nothing to record
+    if (newPrice === previousPrice) return null; // change-gated: skip unchanged
+    await tx.priceObservation.create({ data: { articleId, price: newPrice } });
+
+    // Phase 6: detect drops and return them so the caller can fire alerts
+    // post-commit (enqueuing inside the tx would leak on rollback).
+    const drop = DealProcessingUtils.computePriceDrop(previousPrice, newPrice);
+    if (drop) {
+      this.logger.log(
+        `Price drop on article ${articleId}: ${drop.previousPrice} -> ${drop.currentPrice} ` +
+          `(-${drop.amount}, -${drop.percentage}%)`,
+      );
+    }
+    return drop;
   }
 
   /**
@@ -363,8 +413,8 @@ export class MultiSiteArticleService {
         await tx.articleDealabs.update({
           where: { articleId },
           data: {
-            temperature: siteSpecificData.temperature,
-            commentCount: siteSpecificData.commentCount,
+            temperature: siteSpecificData.temperature ?? undefined,
+            commentCount: siteSpecificData.commentCount ?? undefined,
             communityVerified: siteSpecificData.communityVerified,
             freeShipping: siteSpecificData.freeShipping,
             isCoupon: siteSpecificData.isCoupon,
@@ -379,8 +429,8 @@ export class MultiSiteArticleService {
         await tx.articleVinted.update({
           where: { articleId },
           data: {
-            favoriteCount: siteSpecificData.favoriteCount,
-            viewCount: siteSpecificData.viewCount,
+            favoriteCount: siteSpecificData.favoriteCount ?? undefined,
+            viewCount: siteSpecificData.viewCount ?? undefined,
             condition: siteSpecificData.itemCondition,
             brand: siteSpecificData.brand,
             size: siteSpecificData.size,
@@ -398,9 +448,9 @@ export class MultiSiteArticleService {
             postcode: siteSpecificData.postcode,
             department: siteSpecificData.department,
             region: siteSpecificData.region,
-            proSeller: siteSpecificData.proSeller,
+            proSeller: siteSpecificData.proSeller ?? undefined,
             sellerName: siteSpecificData.sellerName,
-            urgentFlag: siteSpecificData.urgentFlag,
+            urgentFlag: siteSpecificData.urgentFlag ?? undefined,
           },
         });
         break;
@@ -413,11 +463,13 @@ export class MultiSiteArticleService {
     data: DealabsData,
     listing: UniversalListing,
   ): Promise<void> {
+    // Map null -> undefined for non-nullable DB columns so Prisma applies its
+    // schema-level default (e.g. temperature=0) instead of us fabricating one.
     await tx.articleDealabs.create({
       data: {
         articleId,
-        temperature: data.temperature,
-        commentCount: data.commentCount,
+        temperature: data.temperature ?? undefined,
+        commentCount: data.commentCount ?? undefined,
         communityVerified: data.communityVerified,
         freeShipping: data.freeShipping,
         isCoupon: data.isCoupon,
@@ -434,11 +486,13 @@ export class MultiSiteArticleService {
     articleId: string,
     data: VintedData,
   ): Promise<void> {
+    // DB has @default on favoriteCount/viewCount; condition is required and
+    // enforced upstream by validateVintedListing.
     await tx.articleVinted.create({
       data: {
         articleId,
-        favoriteCount: data.favoriteCount,
-        viewCount: data.viewCount,
+        favoriteCount: data.favoriteCount ?? undefined,
+        viewCount: data.viewCount ?? undefined,
         condition: data.itemCondition,
         brand: data.brand,
         size: data.size,
@@ -454,6 +508,8 @@ export class MultiSiteArticleService {
     articleId: string,
     data: LeBonCoinData,
   ): Promise<void> {
+    // proSeller/urgentFlag are null when the LLM didn't see the badge; let
+    // Prisma apply the schema default rather than fabricating `false`.
     await tx.articleLeBonCoin.create({
       data: {
         articleId,
@@ -461,9 +517,9 @@ export class MultiSiteArticleService {
         postcode: data.postcode,
         department: data.department,
         region: data.region,
-        proSeller: data.proSeller,
+        proSeller: data.proSeller ?? undefined,
         sellerName: data.sellerName,
-        urgentFlag: data.urgentFlag,
+        urgentFlag: data.urgentFlag ?? undefined,
       },
     });
   }

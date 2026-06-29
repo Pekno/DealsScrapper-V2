@@ -6,6 +6,7 @@ export default {
   rootDir: '.',
   testMatch: [
     '<rootDir>/test/unit/**/*.spec.ts',
+    '<rootDir>/src/**/__tests__/**/*.spec.ts',
   ],
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
   coverageDirectory: 'coverage/scraper',

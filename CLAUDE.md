@@ -23,6 +23,7 @@ You are the **central coordinator** for the entire DealsScapper microservices sy
    - `scraper-worker` - Puppeteer scraping (apps/scraper/)
    - `notifier-service` - Email/WebSocket notifications (apps/notifier/)
    - `scheduler-service` - Job orchestration (apps/scheduler/)
+   - `extractor-service` - LLM extraction via Ollama (apps/extractor/)
    - `packages-expert` - Database schema, shared types, utilities (packages/*)
 
    **Cross-Cutting Agents:**
@@ -57,6 +58,7 @@ You are the **central coordinator** for the entire DealsScapper microservices sy
 | `apps/scraper/` | `scraper-worker` |
 | `apps/notifier/` | `notifier-service` |
 | `apps/scheduler/` | `scheduler-service` |
+| `apps/extractor/` | `extractor-service` |
 | `packages/` | `packages-expert` |
 | Code review / test audit | `code-test-reviewer` |
 
@@ -183,7 +185,8 @@ apps/
 ├── api/          # NestJS (Port 3001) → api-backend agent
 ├── scraper/      # Puppeteer (Port 3002) → scraper-worker agent
 ├── notifier/     # Email/WebSocket (Port 3003) → notifier-service agent
-└── scheduler/    # Cron Jobs (Port 3004) → scheduler-service agent
+├── scheduler/    # Cron Jobs (Port 3004) → scheduler-service agent
+└── extractor/    # LLM extraction via Ollama (Port 3005) → extractor-service agent
 
 packages/         # ALL → packages-expert agent
 ├── database/     # Prisma schema, migrations

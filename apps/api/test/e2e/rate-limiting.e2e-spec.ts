@@ -178,6 +178,5 @@ describe('Rate Limiting Protection', () => {
 
       // All requests should succeed
     });
-
   });
 });

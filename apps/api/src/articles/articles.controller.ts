@@ -14,13 +14,7 @@
  * - Pagination
  */
 
-import {
-  Controller,
-  Get,
-  Query,
-  Param,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Query, Param, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -31,6 +25,7 @@ import {
   ApiNotFoundResponse,
   ApiQuery,
   ApiParam,
+  ApiExtraModels,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { ArticlesService } from './articles.service.js';
@@ -39,6 +34,7 @@ import {
   ArticleResponseDto,
   ArticleListResponseDto,
 } from './dto/article-response.dto.js';
+import { ProductSuggestionDto } from './dto/product-suggestion.dto.js';
 import {
   createSuccessResponse,
   type StandardApiResponse,
@@ -47,6 +43,7 @@ import {
 @ApiTags('Articles')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@ApiExtraModels(ProductSuggestionDto)
 @ApiUnauthorizedResponse({
   description: 'Unauthorized - Invalid or missing JWT token',
 })
@@ -75,7 +72,8 @@ export class ArticlesController {
     name: 'sites',
     required: false,
     type: String,
-    description: 'Comma-separated list of sites to filter by (dealabs, vinted, leboncoin)',
+    description:
+      'Comma-separated list of sites to filter by (dealabs, vinted, leboncoin)',
     example: 'dealabs,vinted',
   })
   @ApiQuery({
@@ -213,10 +211,52 @@ export class ArticlesController {
     description: 'Invalid search parameters',
   })
   async search(
-    @Query() query: SearchArticlesDto,
+    @Query() query: SearchArticlesDto
   ): Promise<StandardApiResponse<ArticleListResponseDto>> {
     const result = await this.articlesService.search(query);
     return createSuccessResponse(result, 'Articles retrieved successfully');
+  }
+
+  /**
+   * Get cross-site "also found on" suggestions for an article
+   * GET /articles/:id/similar
+   */
+  @Get(':id/similar')
+  @ApiOperation({
+    summary: 'Get similar articles from other sites',
+    description:
+      'Returns up to 5 cross-site articles that look like the same product as the given article ("also found on" suggestions), sorted by relevance. Returns an empty list if the source article is not found.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Source article ID (internal CUID)',
+    example: 'clx1234567890',
+  })
+  @ApiOkResponse({
+    description: 'Similar articles retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: {
+          type: 'string',
+          example: 'Similar articles retrieved successfully',
+        },
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/ProductSuggestionDto' },
+        },
+      },
+    },
+  })
+  async findSimilar(
+    @Param('id') id: string
+  ): Promise<StandardApiResponse<ProductSuggestionDto[]>> {
+    const suggestions = await this.articlesService.findSimilar(id);
+    return createSuccessResponse(
+      suggestions,
+      'Similar articles retrieved successfully'
+    );
   }
 
   /**
@@ -249,7 +289,7 @@ export class ArticlesController {
     description: 'Article not found',
   })
   async getById(
-    @Param('id') id: string,
+    @Param('id') id: string
   ): Promise<StandardApiResponse<ArticleResponseDto>> {
     const article = await this.articlesService.getById(id);
     return createSuccessResponse(article, 'Article retrieved successfully');

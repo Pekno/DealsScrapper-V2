@@ -26,8 +26,9 @@ import { DealabsExpiryResolver } from '../adapters/dealabs/dealabs-expiry-resolv
 import { DealPersistenceService } from '../services/deal-persistence.service.js';
 import { VintedAdapter } from '../adapters/vinted/vinted.adapter.js';
 import { LeBonCoinAdapter } from '../adapters/leboncoin/leboncoin.adapter.js';
-import { FieldExtractorService } from '../field-extraction/field-extractor.service.js';
 import { SITE_QUEUE_CONFIGS, SiteSource, getSiteQueueName } from '@dealscrapper/shared-types';
+import { LlmExtractionModule } from '../llm-extraction/llm-extraction.module.js';
+import { NotificationModule } from '../notification/notification.module.js';
 
 /**
  * Mapping of site sources to their processor classes
@@ -123,6 +124,9 @@ export class JobProcessorModule {
         PuppeteerPoolModule,
         DealElasticSearchModule,
         FilterMatchingModule,
+        LlmExtractionModule,
+        // Phase 6: lets MultiSiteArticleService fire price-drop alerts
+        NotificationModule,
       ],
       providers: [
         // Site-specific processors based on configuration
@@ -146,8 +150,6 @@ export class JobProcessorModule {
         DealabsExpiryResolver,
         VintedAdapter,
         LeBonCoinAdapter,
-        FieldExtractorService,
-
         // Deal persistence (presence-based expiry detection)
         FilterRepository,
         RuleEngineService,

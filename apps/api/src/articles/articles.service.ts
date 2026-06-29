@@ -14,13 +14,13 @@
  * 5. Transform to response DTOs
  */
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { ElasticsearchService } from '@nestjs/elasticsearch';
+import { Redis } from 'ioredis';
 import { PrismaService } from '@dealscrapper/database';
-import {
-  ArticleWrapper,
-  SiteSource,
-} from '@dealscrapper/shared-types/article';
+import { ArticleWrapper, SiteSource } from '@dealscrapper/shared-types/article';
+import { ProductSuggestion } from '@dealscrapper/shared-types';
+import { SIMILAR_CACHE_REDIS_CLIENT } from './articles.constants.js';
 import { SearchArticlesDto } from './dto/search-articles.dto.js';
 import {
   ArticleResponseDto,
@@ -59,6 +59,25 @@ interface SearchParams {
   size?: number;
 }
 
+/**
+ * Tunable defaults for cross-site "also found on" similarity suggestions.
+ * Locked Appendix A design — strict defaults to favour precision.
+ */
+const SIMILAR_DEFAULTS = {
+  minScore: 8.0,
+  size: 5,
+  minTermFreq: 1,
+  minDocFreq: 1,
+  maxQueryTerms: 25,
+  minimumShouldMatch: '60%',
+  priceRangeFactorLow: 0.85, // -15%
+  priceRangeFactorHigh: 1.15, // +15%
+} as const;
+
+/** Cache key prefix + TTL for findSimilar results. */
+const SIMILAR_CACHE_KEY_PREFIX = 'similar:v1:';
+const SIMILAR_CACHE_TTL_SECONDS = 600; // ~10 minutes
+
 @Injectable()
 export class ArticlesService {
   private readonly logger = createServiceLogger(apiLogConfig);
@@ -67,6 +86,7 @@ export class ArticlesService {
   constructor(
     private readonly elasticsearchService: ElasticsearchService,
     private readonly prisma: PrismaService,
+    @Inject(SIMILAR_CACHE_REDIS_CLIENT) private readonly redis: Redis
   ) {}
 
   /**
@@ -93,7 +113,9 @@ export class ArticlesService {
       // Extract article IDs from search results
       const articleIds = response.hits.hits
         .map((hit: { _id?: string }) => hit._id)
-        .filter((id: string | undefined): id is string => typeof id === 'string');
+        .filter(
+          (id: string | undefined): id is string => typeof id === 'string'
+        );
 
       if (articleIds.length === 0) {
         return {
@@ -106,21 +128,18 @@ export class ArticlesService {
 
       // Load full ArticleWrappers from database
       // PrismaService extends PrismaClient, so it's type-compatible
-      const wrappers = await ArticleWrapper.loadMany(
-        articleIds,
-        this.prisma,
-      );
+      const wrappers = await ArticleWrapper.loadMany(articleIds, this.prisma);
 
       // Transform to response DTOs
       const articles = wrappers.map((wrapper) =>
-        this.wrapperToResponseDto(wrapper),
+        this.wrapperToResponseDto(wrapper)
       );
 
       // Get total hits
       const total =
         typeof response.hits.total === 'number'
           ? response.hits.total
-          : response.hits.total?.value ?? 0;
+          : (response.hits.total?.value ?? 0);
 
       return {
         articles,
@@ -151,6 +170,107 @@ export class ArticlesService {
         throw new NotFoundException(`Article with ID "${id}" not found`);
       }
       throw error;
+    }
+  }
+
+  /**
+   * Find cross-site articles that look like the SAME product as the given
+   * article ("also found on" suggestions).
+   *
+   * Uses an Elasticsearch `more_like_this` query on the article title, scoped
+   * to active/non-expired articles from OTHER sites, optionally constrained to
+   * a ±15% price band around the source article's current price.
+   *
+   * @param articleId - Source article ID (internal CUID)
+   * @returns Up to 5 product suggestions sorted by relevance, or [] if the
+   *   source article is not found
+   */
+  async findSimilar(articleId: string): Promise<ProductSuggestion[]> {
+    const cacheKey = `${SIMILAR_CACHE_KEY_PREFIX}${articleId}`;
+
+    const cached = await this.readCache(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+
+    const result = await this.computeSimilar(articleId);
+    await this.writeCache(cacheKey, result);
+    return result;
+  }
+
+  /**
+   * Compute cross-site product suggestions live (Elasticsearch more_like_this).
+   * The cache wrapper lives in {@link findSimilar}.
+   */
+  private async computeSimilar(
+    articleId: string
+  ): Promise<ProductSuggestion[]> {
+    let source: ArticleWrapper;
+    try {
+      // PrismaService extends PrismaClient, so it's type-compatible
+      source = await ArticleWrapper.load(articleId, this.prisma);
+    } catch (error) {
+      if ((error as Error).name === 'ArticleNotFoundException') {
+        return [];
+      }
+      throw error;
+    }
+
+    const query = this.buildSimilarQuery(
+      source.base.title,
+      source.source,
+      source.base.currentPrice
+    );
+
+    try {
+      const response = await this.elasticsearchService.search({
+        index: this.indexName,
+        min_score: SIMILAR_DEFAULTS.minScore,
+        size: SIMILAR_DEFAULTS.size,
+        query,
+        sort: ['_score', { scrapedAt: { order: 'desc' } }],
+      });
+
+      return response.hits.hits.map((hit) => this.hitToSuggestion(hit));
+    } catch (error) {
+      this.logger.error(`Similar article search failed: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Read cached suggestions. Fails open: any Redis error (unavailable, parse
+   * failure) logs a warning and returns null so the caller computes live.
+   */
+  private async readCache(
+    cacheKey: string
+  ): Promise<ProductSuggestion[] | null> {
+    try {
+      const raw = await this.redis.get(cacheKey);
+      return raw === null ? null : (JSON.parse(raw) as ProductSuggestion[]);
+    } catch (error) {
+      this.logger.warn(`Similar cache read failed for ${cacheKey}: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Store suggestions with a TTL. Fails open: a cache write failure must never
+   * break the endpoint, so it is logged and swallowed.
+   */
+  private async writeCache(
+    cacheKey: string,
+    suggestions: ProductSuggestion[]
+  ): Promise<void> {
+    try {
+      await this.redis.set(
+        cacheKey,
+        JSON.stringify(suggestions),
+        'EX',
+        SIMILAR_CACHE_TTL_SECONDS
+      );
+    } catch (error) {
+      this.logger.warn(`Similar cache write failed for ${cacheKey}: ${error}`);
     }
   }
 
@@ -346,6 +466,75 @@ export class ArticlesService {
       bool: {
         must: mustClauses,
       },
+    };
+  }
+
+  /**
+   * Build the `more_like_this` query for cross-site product suggestions.
+   *
+   * Excludes the source site, restricts to active/non-expired articles, and
+   * (when the source price is known) constrains to a ±15% price band.
+   */
+  private buildSimilarQuery(
+    title: string,
+    source: SiteSource,
+    currentPrice: number | null
+  ): Record<string, unknown> {
+    const filter: Record<string, unknown>[] = [
+      { term: { isActive: true } },
+      { term: { isExpired: false } },
+    ];
+
+    // Only constrain by price when the source article has a known price.
+    if (currentPrice !== null && currentPrice !== undefined) {
+      filter.push({
+        range: {
+          currentPrice: {
+            gte: currentPrice * SIMILAR_DEFAULTS.priceRangeFactorLow,
+            lte: currentPrice * SIMILAR_DEFAULTS.priceRangeFactorHigh,
+          },
+        },
+      });
+    }
+
+    return {
+      bool: {
+        must: [
+          {
+            more_like_this: {
+              fields: ['title'],
+              like: [{ doc: { title } }],
+              min_term_freq: SIMILAR_DEFAULTS.minTermFreq,
+              min_doc_freq: SIMILAR_DEFAULTS.minDocFreq,
+              max_query_terms: SIMILAR_DEFAULTS.maxQueryTerms,
+              minimum_should_match: SIMILAR_DEFAULTS.minimumShouldMatch,
+            },
+          },
+        ],
+        filter,
+        must_not: [{ term: { source } }],
+      },
+    };
+  }
+
+  /**
+   * Map an Elasticsearch hit to a ProductSuggestion, reading data directly
+   * from `_source` (no per-hit database round-trip).
+   */
+  private hitToSuggestion(hit: {
+    _id?: string;
+    _score?: number | null;
+    _source?: unknown;
+  }): ProductSuggestion {
+    const src = (hit._source ?? {}) as Record<string, unknown>;
+    return {
+      articleId: hit._id ?? '',
+      score: hit._score ?? 0,
+      source: src.source as SiteSource,
+      title: src.title as string,
+      currentPrice: (src.currentPrice as number | null) ?? null,
+      url: src.url as string,
+      scrapedAt: src.scrapedAt as Date,
     };
   }
 

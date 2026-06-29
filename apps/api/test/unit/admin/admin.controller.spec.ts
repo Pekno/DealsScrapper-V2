@@ -29,7 +29,10 @@ describe('AdminController', () => {
       api: { status: 'healthy', details: { message: 'API is operational' } },
       scraper: { status: 'healthy', details: {} },
       notifier: { status: 'healthy', details: {} },
-      scheduler: { status: 'unreachable', details: { error: 'Connection refused' } },
+      scheduler: {
+        status: 'unreachable',
+        details: { error: 'Connection refused' },
+      },
     },
     metrics: {
       totalUsers: 42,
@@ -103,7 +106,9 @@ describe('AdminController', () => {
 
   describe('getDashboard', () => {
     it('should return dashboard metrics wrapped in a success response', async () => {
-      mockAdminService.getDashboardMetrics.mockResolvedValue(mockDashboardMetrics);
+      mockAdminService.getDashboardMetrics.mockResolvedValue(
+        mockDashboardMetrics
+      );
 
       const result = await controller.getDashboard();
 
@@ -146,15 +151,15 @@ describe('AdminController', () => {
       const result = await controller.updateUserRole(
         'user-1',
         { role: UserRole.ADMIN },
-        mockAdminRequest as never,
+        mockAdminRequest as never
       );
 
       expect(result.success).toBe(true);
-      expect(result.data.role).toBe(UserRole.ADMIN);
+      expect(result.data!.role).toBe(UserRole.ADMIN);
       expect(result.message).toBe('User role updated successfully');
       expect(mockAdminService.updateUserRole).toHaveBeenCalledWith(
         'user-1',
-        UserRole.ADMIN,
+        UserRole.ADMIN
       );
     });
   });
@@ -169,7 +174,7 @@ describe('AdminController', () => {
 
       const result = await controller.deleteUser(
         'user-1',
-        mockRequest as never,
+        mockRequest as never
       );
 
       expect(result.success).toBe(true);
@@ -177,7 +182,7 @@ describe('AdminController', () => {
       expect(result.message).toBe('User deleted successfully');
       expect(mockAdminService.deleteUser).toHaveBeenCalledWith(
         'user-1',
-        'admin-user-id',
+        'admin-user-id'
       );
     });
   });
@@ -188,7 +193,7 @@ describe('AdminController', () => {
 
       const result = await controller.resetUserPassword(
         'user-1',
-        mockAdminRequest as never,
+        mockAdminRequest as never
       );
 
       expect(result.success).toBe(true);
@@ -203,19 +208,24 @@ describe('AdminController', () => {
 
       const result = await controller.resetUserPassword(
         'user-1',
-        mockAdminRequest as never,
+        mockAdminRequest as never
       );
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ resetUrl });
-      expect(result.message).toBe('No email provider configured — share this link with the user');
+      expect(result.message).toBe(
+        'No email provider configured — share this link with the user'
+      );
       expect(mockAdminService.resetUserPassword).toHaveBeenCalledWith('user-1');
     });
   });
 
   describe('getApiHealth', () => {
     it('should return API health in a success response', async () => {
-      const mockHealth = { status: 'healthy', details: { message: 'API is operational' } };
+      const mockHealth = {
+        status: 'healthy',
+        details: { message: 'API is operational' },
+      };
       mockAdminService.getApiHealth.mockResolvedValue(mockHealth);
 
       const result = await controller.getApiHealth();
@@ -228,7 +238,10 @@ describe('AdminController', () => {
 
   describe('getNotifierHealth', () => {
     it('should return notifier health in a success response', async () => {
-      const mockHealth = { status: 'healthy', details: { websocket: 'active' } };
+      const mockHealth = {
+        status: 'healthy',
+        details: { websocket: 'active' },
+      };
       mockAdminService.getNotifierHealth.mockResolvedValue(mockHealth);
 
       const result = await controller.getNotifierHealth();
@@ -260,8 +273,8 @@ describe('AdminController', () => {
       const result = await controller.getSchedulerHealth();
 
       expect(result.success).toBe(true);
-      expect(result.data.scheduler.status).toBe('healthy');
-      expect(result.data.scrapers).toHaveLength(1);
+      expect(result.data!.scheduler.status).toBe('healthy');
+      expect(result.data!.scrapers).toHaveLength(1);
       expect(result.message).toBe('Scheduler health retrieved successfully');
     });
   });

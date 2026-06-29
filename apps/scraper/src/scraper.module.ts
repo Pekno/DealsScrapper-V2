@@ -18,6 +18,10 @@ import { FilterMatchingModule } from './filter-matching/filter-matching.module.j
 import { NotificationModule } from './notification/notification.module.js';
 // Removed CategoryMonitorModule - monitoring handled by scheduler
 import { ScraperHealthService } from './health/scraper-health.service.js';
+import { LlmExtractionModule } from './llm-extraction/llm-extraction.module.js';
+import { LlmExtractionService } from './llm-extraction/llm-extraction.service.js';
+import { OllamaModule } from './llm-extraction/ollama/ollama.module.js';
+import { OllamaService } from './llm-extraction/ollama/ollama.service.js';
 import { DealElasticSearchModule } from './elasticsearch/elasticsearch.module.js';
 import { WorkerRegistrationModule } from './worker-registration/worker-registration.module.js';
 
@@ -59,6 +63,12 @@ import { WorkerRegistrationModule } from './worker-registration/worker-registrat
         // Optional Variables
         PUPPETEER_EXECUTABLE_PATH: 'OPTIONAL', // undefined is acceptable
         REDIS_PASSWORD: 'OPTIONAL', // undefined is acceptable (no auth)
+
+        // Ollama / LLM Configuration
+        OLLAMA_URL: 'REQUIRED',
+        OLLAMA_MODEL: 'OPTIONAL',
+        LLM_CONCURRENCY: 'OPTIONAL',
+        LLM_TIMEOUT_MS: 'OPTIONAL',
       },
     }),
     // ScheduleModule.forRoot() removed - workers don't run scheduled tasks
@@ -87,6 +97,7 @@ import { WorkerRegistrationModule } from './worker-registration/worker-registrat
     }),
     // Shared health module with scraper-specific health service
     SharedHealthModule.forRootAsync({
+      imports: [LlmExtractionModule],
       useFactory: (sharedConfig: SharedConfigService) => ({
         serviceName: 'scraper',
         version: sharedConfig.get('APP_VERSION'),
@@ -97,12 +108,15 @@ import { WorkerRegistrationModule } from './worker-registration/worker-registrat
         useFactory: (
           puppeteerPool: PuppeteerPoolService,
           prisma: PrismaService,
-          sharedConfig: SharedConfigService
-        ) => new ScraperHealthService(puppeteerPool, prisma, sharedConfig),
-        inject: [PuppeteerPoolService, PrismaService, SharedConfigService],
+          sharedConfig: SharedConfigService,
+          ollamaService: OllamaService,
+          llmExtraction: LlmExtractionService
+        ) => new ScraperHealthService(puppeteerPool, prisma, sharedConfig, ollamaService, llmExtraction),
+        inject: [PuppeteerPoolService, PrismaService, SharedConfigService, OllamaService, LlmExtractionService],
       },
     }),
     PrismaModule,
+    LlmExtractionModule,
     DealElasticSearchModule,
     PuppeteerPoolModule,
     JobProcessorModule.register(),

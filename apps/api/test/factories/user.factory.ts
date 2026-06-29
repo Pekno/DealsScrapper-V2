@@ -1,9 +1,6 @@
 /**
  * Business-focused test data factories for users
  */
-import { UserCreateInput } from '@dealscrapper/database';
-
-type UserCreateData = Omit<UserCreateInput, 'id' | 'createdAt' | 'updatedAt'>;
 
 // Type for registration requests (only fields that should be sent to API)
 type UserRegistrationData = {

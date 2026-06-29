@@ -12,6 +12,7 @@ describe('NotificationService', () => {
   const mockPrismaService = {
     match: {
       update: jest.fn(),
+      findMany: jest.fn(),
     },
   };
 
@@ -73,6 +74,7 @@ describe('NotificationService', () => {
       imageUrl: 'https://example.com/image.jpg',
       isExpired: false,
       isCoupon: false,
+      location: null,
       siteId: 'dealabs',
       isActive: true,
       scrapedAt: new Date(),
@@ -168,6 +170,31 @@ describe('NotificationService', () => {
       expect(queueCall[2].priority).toBe(1);
     });
 
+    it('should set a deterministic jobId so retried jobs cannot duplicate the notification', async () => {
+      mockPrismaService.match.update.mockResolvedValue(mockMatch);
+
+      await service.queueExternalNotification(mockMatch);
+
+      // Queue-level dedup: a deterministic jobId means Bull ignores a duplicate
+      // add for the same match while the job exists/is retained.
+      const queueCall = externalNotificationQueue.add.mock.calls[0];
+      expect(queueCall[2].jobId).toBe(`deal-match-${mockMatch.id}`);
+    });
+
+    it('carries an event-granular dedupKey in the job data equal to the jobId', async () => {
+      mockPrismaService.match.update.mockResolvedValue(mockMatch);
+
+      await service.queueExternalNotification(mockMatch);
+
+      // The notifier dedups on job.data.dedupKey; it must equal the Bull jobId so
+      // queue-level and notifier-level dedup agree on the same event key.
+      const queueCall = externalNotificationQueue.add.mock.calls[0];
+      const jobData = queueCall[1];
+      const jobOptions = queueCall[2];
+      expect(jobData.dedupKey).toBe(`deal-match-${mockMatch.id}`);
+      expect(jobData.dedupKey).toBe(jobOptions.jobId);
+    });
+
     it('should prevent duplicate notifications to avoid user annoyance', async () => {
       mockPrismaService.match.update.mockResolvedValue(mockMatch);
 
@@ -218,6 +245,7 @@ describe('NotificationService', () => {
         matchId: 'match-123',
         userId: 'user-123',
         filterId: 'filter-123',
+        dedupKey: 'deal-match-match-123', // event-granular key, equals the Bull jobId
         dealData: {
           title: 'Gaming Laptop Dell',
           price: 999.99,
@@ -231,6 +259,98 @@ describe('NotificationService', () => {
         priority: 'high',
         timestamp: expect.any(Date),
       });
+    });
+  });
+
+  describe('Price-drop alerts (Phase 6 throttle)', () => {
+    const drop = {
+      previousPrice: 1200,
+      currentPrice: 999.99,
+      amount: 200.01,
+      percentage: 16.67,
+    };
+
+    it('queues a drop alert for a match that has never been notified', async () => {
+      mockPrismaService.match.findMany.mockResolvedValue([
+        { ...mockMatch, notifiedAt: null },
+      ]);
+      mockPrismaService.match.update.mockResolvedValue(mockMatch);
+
+      const queued = await service.queuePriceDropAlerts('article-123', drop);
+
+      expect(queued).toBe(1);
+      // value-edge dedup: jobId encodes the dropped price, so the SAME price
+      // can't re-fire but a new lower price will
+      const queueCall = externalNotificationQueue.add.mock.calls[0];
+      expect(queueCall[2].jobId).toBe('deal-match-match-123-drop-999.99');
+    });
+
+    it('enqueues a drop with a dedupKey distinct from the initial match key', async () => {
+      mockPrismaService.match.findMany.mockResolvedValue([
+        { ...mockMatch, notifiedAt: null },
+      ]);
+      mockPrismaService.match.update.mockResolvedValue(mockMatch);
+
+      await service.queuePriceDropAlerts('article-123', drop);
+
+      // The drop carries its own per-price dedupKey in the job DATA, so the
+      // notifier delivers it instead of swallowing it as the earlier match.
+      const queueCall = externalNotificationQueue.add.mock.calls[0];
+      const jobData = queueCall[1];
+      const matchKey = `deal-match-${mockMatch.id}`;
+      const dropKey = `deal-match-${mockMatch.id}-drop-${drop.currentPrice}`;
+      expect(jobData.dedupKey).toBe(dropKey);
+      expect(jobData.dedupKey).toBe(queueCall[2].jobId);
+      expect(jobData.dedupKey).not.toBe(matchKey);
+    });
+
+    it('skips a match still inside the cooldown window', async () => {
+      const now = new Date('2026-06-28T12:00:00Z');
+      const justNotified = new Date('2026-06-28T11:00:00Z'); // 1h ago < 6h cooldown
+      mockPrismaService.match.findMany.mockResolvedValue([
+        { ...mockMatch, notifiedAt: justNotified },
+      ]);
+
+      const queued = await service.queuePriceDropAlerts('article-123', drop, now);
+
+      expect(queued).toBe(0);
+      expect(externalNotificationQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('fires again once the cooldown has elapsed', async () => {
+      const now = new Date('2026-06-28T12:00:00Z');
+      const longAgo = new Date('2026-06-28T05:00:00Z'); // 7h ago > 6h cooldown
+      mockPrismaService.match.findMany.mockResolvedValue([
+        { ...mockMatch, notifiedAt: longAgo },
+      ]);
+      mockPrismaService.match.update.mockResolvedValue(mockMatch);
+
+      const queued = await service.queuePriceDropAlerts('article-123', drop, now);
+
+      expect(queued).toBe(1);
+      expect(externalNotificationQueue.add).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 0 when the article has no matches', async () => {
+      mockPrismaService.match.findMany.mockResolvedValue([]);
+
+      const queued = await service.queuePriceDropAlerts('article-123', drop);
+
+      expect(queued).toBe(0);
+      expect(externalNotificationQueue.add).not.toHaveBeenCalled();
+    });
+
+    it('only queries active-article matches for the dropped article', async () => {
+      mockPrismaService.match.findMany.mockResolvedValue([]);
+
+      await service.queuePriceDropAlerts('article-123', drop);
+
+      expect(mockPrismaService.match.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { articleId: 'article-123', article: { isActive: true } },
+          include: { filter: true, article: true },
+        })
+      );
     });
   });
 });

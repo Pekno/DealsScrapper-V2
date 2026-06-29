@@ -334,3 +334,6 @@ docs/memories/old
 .claude/settings.local.json.vscode/
 .claude/settings.local.json
 .vscode
+
+.claude/plan/*
+run-gnhf.ps1

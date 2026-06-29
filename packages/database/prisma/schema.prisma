@@ -263,6 +263,19 @@ model ArticleLeBonCoin {
   @@map("article_leboncoin")
 }
 
+// Append-only price history. NO @relation to Article (Wrapper pattern, consistent
+// with extension tables). Stores each observed price so we stop losing data when
+// Article.currentPrice is overwritten in place on each scrape.
+model PriceObservation {
+  id         String   @id @default(cuid())
+  articleId  String
+  price      Float
+  observedAt DateTime @default(now())
+
+  @@index([articleId, observedAt])
+  @@map("price_observations")
+}
+
 model Match {
   id         String    @id @default(cuid())
   filterId   String
@@ -285,6 +298,7 @@ model Notification {
   id         String    @id @default(cuid())
   userId     String
   matchId    String? // Optional foreign key to Match (only for DEAL_MATCH type)
+  dedupKey   String? // Event-granular idempotency key set by the producer (e.g. deal-match-<id>-drop-<price>); distinguishes notification events sharing the same matchId
   type       String // 'DEAL_MATCH', 'SYSTEM', 'ALERT' (notification types)
   subject    String?
   content    Json
@@ -303,6 +317,7 @@ model Notification {
   @@index([sent])
   @@index([userId])
   @@index([matchId])
+  @@index([userId, dedupKey])
   @@index([isRead])
   @@index([userId, isRead])
   @@index([createdAt])
@@ -361,9 +376,11 @@ model ScrapingJob {
   error       String?
 
   // Execution Results
-  dealsFound      Int? // Number of deals found in this execution
-  dealsProcessed  Int? // Number of deals successfully processed
-  executionTimeMs Int? // Time taken for execution
+  dealsFound             Int? // Number of deals found in this execution
+  dealsProcessed         Int? // Number of deals successfully processed
+  executionTimeMs        Int? // Total job duration
+  scrapingTimeMs         Int? // Time spent fetching pages with Puppeteer
+  ollamaExtractionTimeMs Int? // Time spent on Ollama LLM extraction
 
   // Metadata (for any additional execution-specific data)
   metadata  Json?

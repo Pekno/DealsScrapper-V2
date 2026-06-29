@@ -7,10 +7,41 @@ import { FilterMatcherService } from '../../../src/filters/services/filter-match
 import { PrismaService } from '@dealscrapper/database';
 import { CreateFilterDto } from '../../../src/filters/dto/create-filter.dto';
 import { FilterQueryDto } from '../../../src/filters/dto/filter-query.dto';
+import type { FilterRule } from '@dealscrapper/shared-types';
+
+/**
+ * Structural mock of PrismaService exposing only the delegate methods this
+ * suite drives, each typed as a jest.Mock so mockResolvedValue(Once) is visible.
+ * Avoids jest.Mocked<PrismaService>, which resolves delegate methods to their
+ * real Prisma call signatures (no jest mock helpers).
+ */
+interface MockedPrismaService {
+  filter: {
+    create: jest.Mock;
+    findMany: jest.Mock;
+    findFirst: jest.Mock;
+    findUnique: jest.Mock;
+    update: jest.Mock;
+    delete: jest.Mock;
+    count: jest.Mock;
+  };
+  match: {
+    findMany: jest.Mock;
+    findFirst: jest.Mock;
+    count: jest.Mock;
+    aggregate: jest.Mock;
+    deleteMany: jest.Mock;
+  };
+  category: {
+    findMany: jest.Mock;
+    findFirst: jest.Mock;
+    findUnique: jest.Mock;
+  };
+}
 
 describe('FiltersService - User Deal Discovery & Personalization', () => {
   let service: FiltersService;
-  let prisma: jest.Mocked<PrismaService>;
+  let prisma: MockedPrismaService;
   let httpService: jest.Mocked<HttpService>;
   let sharedConfigService: jest.Mocked<SharedConfigService>;
 
@@ -44,7 +75,6 @@ describe('FiltersService - User Deal Discovery & Personalization', () => {
       rules: [],
       matchLogic: 'AND',
       minScore: 50,
-      scoreMode: 'weighted',
     },
     immediateNotifications: true,
     digestFrequency: 'daily',
@@ -63,7 +93,7 @@ describe('FiltersService - User Deal Discovery & Personalization', () => {
     ],
   };
 
-  const mockPrismaService = {
+  const mockPrismaService: MockedPrismaService = {
     filter: {
       create: jest.fn(),
       findMany: jest.fn(),
@@ -104,7 +134,10 @@ describe('FiltersService - User Deal Discovery & Personalization', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FiltersService,
-        { provide: PrismaService, useValue: mockPrismaService },
+        {
+          provide: PrismaService,
+          useValue: mockPrismaService as unknown as PrismaService,
+        },
         { provide: HttpService, useValue: mockHttpService },
         { provide: SharedConfigService, useValue: mockSharedConfigService },
         { provide: FilterMatcherService, useValue: mockFilterMatcherService },
@@ -131,13 +164,12 @@ describe('FiltersService - User Deal Discovery & Personalization', () => {
           rules: [
             {
               field: 'price',
-              operator: 'lte',
+              operator: 'lte' as FilterRule['operator'],
               value: 500,
             },
           ],
           matchLogic: 'AND',
           minScore: 50,
-          scoreMode: 'weighted',
         },
         immediateNotifications: true,
         digestFrequency: 'daily',
@@ -179,8 +211,8 @@ describe('FiltersService - User Deal Discovery & Personalization', () => {
 
       // User Value: Filter is ready to find deals with tracking capabilities
       expect(result.stats).toBeDefined(); // User can see performance data
-      expect(result.stats.totalMatches).toBe(0); // Starting fresh
-      expect(result.stats.matchesLast24h).toBe(0); // No matches yet
+      expect(result.stats!.totalMatches).toBe(0); // Starting fresh
+      expect(result.stats!.matchesLast24h).toBe(0); // No matches yet
     });
 
     it('should prevent users from creating filters with invalid categories', async () => {
@@ -191,13 +223,12 @@ describe('FiltersService - User Deal Discovery & Personalization', () => {
           rules: [
             {
               field: 'price',
-              operator: 'lte',
+              operator: 'lte' as FilterRule['operator'],
               value: 500,
             },
           ],
           matchLogic: 'AND',
           minScore: 50,
-          scoreMode: 'weighted',
         },
       };
 

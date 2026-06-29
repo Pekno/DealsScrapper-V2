@@ -68,7 +68,10 @@ import { apiLogConfig } from '../config/logging.config.js';
 import { User } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
-import { NotificationPriority, QUEUE_PRIORITIES } from '@dealscrapper/shared-types';
+import {
+  NotificationPriority,
+  QUEUE_PRIORITIES,
+} from '@dealscrapper/shared-types';
 import { UsersService } from '../users/users.service.js';
 
 // Local interface for login requests where LocalAuthGuard populates req.user with full User (without password)
@@ -109,7 +112,7 @@ export class AuthController {
     private readonly emailVerificationService: EmailVerificationService,
     private readonly passwordResetService: PasswordResetService,
     private readonly usersService: UsersService,
-    @InjectQueue('notifications') private readonly notificationQueue: Queue,
+    @InjectQueue('notifications') private readonly notificationQueue: Queue
   ) {}
 
   @Post('register')
@@ -289,7 +292,6 @@ export class AuthController {
     };
   }
 
-
   @Post('resend-verification')
   @Public()
   @UseGuards(AuthRateLimitGuard)
@@ -382,11 +384,12 @@ export class AuthController {
         return SAFE_RESPONSE;
       }
 
-      const configuredExpiresIn = this.passwordResetService.getConfiguredExpiresIn();
+      const configuredExpiresIn =
+        this.passwordResetService.getConfiguredExpiresIn();
       const { resetUrl } = this.passwordResetService.generateResetToken(
         user.id,
         user.email,
-        configuredExpiresIn,
+        configuredExpiresIn
       );
 
       await this.notificationQueue.add(
@@ -402,11 +405,11 @@ export class AuthController {
           priority: QUEUE_PRIORITIES[NotificationPriority.HIGH],
           attempts: 3,
           backoff: { type: 'exponential' as const, delay: 2000 },
-        },
+        }
       );
     } catch (error) {
       this.logger.error(
-        `Error processing forgot-password for ${dto.email}: ${error instanceof Error ? error.message : String(error)}`,
+        `Error processing forgot-password for ${dto.email}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
 
@@ -436,7 +439,10 @@ export class AuthController {
       await this.passwordResetService.validateResetToken(token);
       return { valid: true };
     } catch {
-      return { valid: false, message: 'Token is invalid, expired, or already used' };
+      return {
+        valid: false,
+        message: 'Token is invalid, expired, or already used',
+      };
     }
   }
 
@@ -445,7 +451,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Reset password with token',
-    description: 'Resets the user password using a valid one-time JWT reset token.',
+    description:
+      'Resets the user password using a valid one-time JWT reset token.',
   })
   @ApiBody({ type: ResetPasswordDto })
   @ApiOkResponse({

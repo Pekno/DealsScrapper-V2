@@ -227,7 +227,6 @@ export class EmailVerificationService {
     }
   }
 
-
   /**
    * Public endpoint for resending verification email (prevents email enumeration)
    * Always returns success regardless of whether email exists or is already verified
