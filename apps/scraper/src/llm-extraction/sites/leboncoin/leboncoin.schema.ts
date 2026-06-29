@@ -60,6 +60,19 @@ function parseValidatedDate(val: string | null, field: string): Date | null {
   return parsed;
 }
 
+/**
+ * Resolves the canonical LeBonCoin externalId from the ad URL.
+ *
+ * A LeBonCoin ad's externalId is the numeric segment at the end of the URL path
+ * (e.g. "/ad/accessoires_informatique/3155664945" → "3155664945"). The small LLM
+ * extracts the URL reliably but can hallucinate the externalId, so the URL is the
+ * authoritative source. Falls back to the LLM value when no match is found.
+ */
+function resolveExternalId(llmExternalId: string, url: string): string {
+  const match = /\/(\d+)(?:[/?#].*)?$/.exec(url);
+  return match ? match[1]! : llmExternalId;
+}
+
 export function validateLeBonCoinListing(raw: unknown): UniversalListing {
   if (typeof raw !== 'object' || raw === null) {
     throw new LlmValidationError('output is not an object');
@@ -100,11 +113,13 @@ export function validateLeBonCoinListing(raw: unknown): UniversalListing {
     attributes: null,
   };
 
+  const url = r['url'] as string;
+
   return {
-    externalId: r['externalId'] as string,
+    externalId: resolveExternalId(r['externalId'] as string, url),
     title: r['title'] as string,
     description,
-    url: r['url'] as string,
+    url,
     imageUrl,
     siteId: SiteSource.LEBONCOIN,
     currentPrice,

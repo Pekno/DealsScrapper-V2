@@ -1101,7 +1101,8 @@ describe('Filter Management - Comprehensive E2E', () => {
 
   describe('Data Reliability and Consistency', () => {
     // Shared helper: load all dealabs LLM fixture expected outputs as FixtureArticle[]
-    // Prices in .expected.json are stored in cents (or null for free items) — this helper converts to euros (null stays 0).
+    // Prices in .expected.json are in euros (Float, matching Article.currentPrice and the
+    // scraper's extracted values); free items are null — normalize null to 0.
     const loadDealabsFixtures = (): Cypress.Chainable<FixtureArticle[]> =>
       cy
         .fixture('../../apps/scraper/src/llm-extraction/sites/dealabs/fixtures/dealabs-001.expected.json')
@@ -1114,9 +1115,8 @@ describe('Filter Management - Comprehensive E2E', () => {
                 .then((d3) =>
                   [d1, d2, d3].map((d) => ({
                     ...(d as FixtureArticle),
-                    currentPrice: (d as { currentPrice: number | null }).currentPrice !== null
-                      ? (d as { currentPrice: number }).currentPrice / 100
-                      : 0,
+                    currentPrice:
+                      (d as { currentPrice: number | null }).currentPrice ?? 0,
                   }))
                 )
             )
@@ -1218,8 +1218,10 @@ describe('Filter Management - Comprehensive E2E', () => {
           );
 
           // Step 11: Wait for SmartScrapingStatus loader to be hidden (scraping complete)
+          // Timeout must exceed real scrape+match job duration (LLM extraction is slow),
+          // otherwise the table is read before all matches are created.
           cy.log('⏳ Waiting for scraping status to complete...');
-          cy.get('[data-cy=scraping-status-loader]', { timeout: 15000 }).should(
+          cy.get('[data-cy=scraping-status-loader]', { timeout: 120000 }).should(
             'not.exist'
           );
 
@@ -1350,9 +1352,11 @@ describe('Filter Management - Comprehensive E2E', () => {
             'be.visible'
           );
 
-          // Step 7: Wait for scraping to complete
+          // Step 7: Wait for scraping to complete — MUST finish before editing the
+          // filter, else a still-running scrape job creates matches after the
+          // edit's deleteMany and leaves a stale row. Timeout exceeds job duration.
           cy.log('⏳ Waiting for scraping and matching to complete...');
-          cy.get('[data-cy=scraping-status-loader]', { timeout: 15000 }).should(
+          cy.get('[data-cy=scraping-status-loader]', { timeout: 120000 }).should(
             'not.exist'
           );
           cy.wait(2000); // Allow time for async processing
@@ -1422,13 +1426,17 @@ describe('Filter Management - Comprehensive E2E', () => {
                   }).should('be.visible');
 
                   cy.get('body').then(($body) => {
-                    // Table should either not exist or have 0 rows
+                    // Table should either not exist or show zero PRODUCT rows.
+                    // When there are 0 matches the table still renders a single
+                    // empty-state <tr> ("No products found"), so assert on the
+                    // count of real product rows (which carry cell-title), not
+                    // raw tbody tr.
                     if (
                       $body.find('[data-cy="matching-products-table"]').length >
                       0
                     ) {
                       cy.get('[data-cy="matching-products-table"]')
-                        .find('tbody tr')
+                        .find('[data-cy="cell-title"]')
                         .should('have.length', 0);
                       cy.log(
                         `✅ Match table is now empty (was ${matchCountBefore} matches before edit)`

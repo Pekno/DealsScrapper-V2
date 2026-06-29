@@ -106,8 +106,10 @@ export default function EditFilterPage() {
       const response = await apiClient.updateFilter(filterId, filterData);
 
       if (response.success && response.data) {
-        // Remove filter matches cache entirely since filter criteria may have changed
-        // Using remove: true ensures user sees loading state, not stale matches
+        // Filter criteria may have changed, so any cached matches are now stale.
+        // remove: true drops the cache AND force-refetches (including the now
+        // inactive detail-page query) so returning to the detail page shows the
+        // current backend state, never stale matches.
         invalidateFilterMatches(filterId, { remove: true });
 
         // Show success toast that persists across navigation

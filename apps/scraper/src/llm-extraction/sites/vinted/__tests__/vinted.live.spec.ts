@@ -46,7 +46,7 @@ const RUN_LIVE = process.env['LLM_TESTS'] === '1';
 
       const { listing: result } = await service.extract({
         siteId: SiteSource.VINTED,
-        listingHtml: `<html><body>${example.markdown}</body></html>`,
+        listingHtml: example.html,
         sourceUrl: 'https://www.vinted.fr/catalog/1904-women',
       });
 

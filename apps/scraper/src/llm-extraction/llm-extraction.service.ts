@@ -127,7 +127,7 @@ export class LlmExtractionService {
     const parsed: unknown = JSON.parse(raw);
     let listing: UniversalListing;
     try {
-      listing = site.validate(parsed);
+      listing = site.validate(parsed, markdown);
     } catch (err) {
       this.failedExtractions++;
       if (err instanceof LlmValidationError) {

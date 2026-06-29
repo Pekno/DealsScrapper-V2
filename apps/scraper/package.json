@@ -15,7 +15,7 @@
     "type-check": "tsc --noEmit",
     "clean": "shx rm -rf dist tsconfig.build.tsbuildinfo",
     "test:unit": "dotenv -e ../../.env.test -- jest --forceExit --detectOpenHandles --verbose",
-    "test:llm": "dotenv -e ../../.env.test -- cross-env LLM_TESTS=1 jest --forceExit --detectOpenHandles --verbose --testPathPatterns=\\.live\\.spec\\.ts$",
+    "test:llm": "dotenv -e ../../.env.test -- cross-env LLM_TESTS=1 jest --forceExit --runInBand --detectOpenHandles --verbose --testPathPatterns=\\.live\\.spec\\.ts$",
     "test:e2e": "dotenv -e ../../.env.test -- jest --config jest-e2e.config.mjs --forceExit --detectOpenHandles --verbose"
   },
   "dependencies": {

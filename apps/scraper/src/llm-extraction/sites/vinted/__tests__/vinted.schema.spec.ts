@@ -20,7 +20,8 @@ describe('validateVintedListing', () => {
   it('returns a fully populated listing when every field is present', () => {
     const result = validateVintedListing(baseValid);
 
-    expect(result.externalId).toBe('vinted-42');
+    // externalId is derived from the URL's numeric segment, not the raw LLM value.
+    expect(result.externalId).toBe('42');
     expect(result.currentPrice).toBe(3500);
     expect(result.publishedAt).toEqual(new Date('2025-04-21T12:30:00.000Z'));
     expect(result.siteId).toBe(SiteSource.VINTED);

@@ -22,7 +22,8 @@ describe('validateLeBonCoinListing', () => {
   it('returns a fully populated listing when every field is present', () => {
     const result = validateLeBonCoinListing(baseValid);
 
-    expect(result.externalId).toBe('lbc-999');
+    // externalId is derived from the URL's numeric segment, not the raw LLM value.
+    expect(result.externalId).toBe('999');
     expect(result.currentPrice).toBe(75000);
     expect(result.publishedAt).toEqual(new Date('2025-04-22T09:15:00.000Z'));
     expect(result.location).toBe('Paris 75011');

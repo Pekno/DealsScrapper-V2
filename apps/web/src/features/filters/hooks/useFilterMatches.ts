@@ -354,8 +354,13 @@ export const useInvalidateFilterMatches = () => {
         : ['filter-matches'];
 
       if (options?.remove) {
-        // Remove cache entirely - next visit shows loading state, no stale data
+        // Drop any cached pages so no stale body can be rendered, then force a
+        // refetch of every matching query (including inactive ones, since the
+        // detail page is unmounted after an edit) so fresh data is ready on
+        // return. removeQueries + invalidateQueries(refetchType: 'all')
+        // guarantees the post-edit matches reflect current backend state.
         queryClient.removeQueries({ queryKey });
+        queryClient.invalidateQueries({ queryKey, refetchType: 'all' });
       } else {
         // Invalidate - marks as stale, shows old data while refetching
         queryClient.invalidateQueries({ queryKey });

@@ -19,8 +19,8 @@ export class VintedSite implements LlmSiteModule {
     return buildVintedUserPrompt(markdown, this.getExamples());
   }
 
-  validate(raw: unknown): UniversalListing {
-    return validateVintedListing(raw);
+  validate(raw: unknown, markdown?: string): UniversalListing {
+    return validateVintedListing(raw, markdown);
   }
 
   getExamples(): LlmExample[] {

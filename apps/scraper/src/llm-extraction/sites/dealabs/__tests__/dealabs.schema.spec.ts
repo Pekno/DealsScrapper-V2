@@ -20,7 +20,8 @@ describe('validateDealabsListing', () => {
   it('returns a fully populated listing when every field is present', () => {
     const result = validateDealabsListing(baseValid);
 
-    expect(result.externalId).toBe('deal-123');
+    // externalId is derived from the URL's numeric suffix, not the raw LLM value.
+    expect(result.externalId).toBe('123');
     expect(result.currentPrice).toBe(2999);
     expect(result.originalPrice).toBe(4999);
     expect(result.publishedAt).toEqual(new Date('2025-04-20T10:00:00.000Z'));

@@ -24,8 +24,8 @@ export class DealabsSite implements LlmSiteModule {
     return buildDealabsUserPrompt(markdown, this.getExamples());
   }
 
-  validate(raw: unknown): UniversalListing {
-    return validateDealabsListing(raw);
+  validate(raw: unknown, markdown?: string): UniversalListing {
+    return validateDealabsListing(raw, markdown);
   }
 
   getExamples(): LlmExample[] {

@@ -324,6 +324,34 @@ abstract class BaseScrapeProcessor {
 export class DealabsScrapeProcessor extends BaseScrapeProcessor {
   protected readonly site = SiteSource.DEALABS;
 
+  // Explicit constructor required so TypeScript emits `design:paramtypes` DI
+  // metadata on this concrete class. A decorated subclass without its own
+  // constructor emits no param metadata, so NestJS would inject nothing and
+  // every dependency would be undefined at runtime.
+  constructor(
+    adapterRegistry: AdapterRegistry,
+    unifiedExtractionService: UnifiedExtractionService,
+    multiSiteArticleService: MultiSiteArticleService,
+    dealPersistenceService: DealPersistenceService,
+    puppeteerPool: PuppeteerPoolService,
+    filterMatchingService: FilterMatchingService,
+    categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
+    categoryRepository: CategoryRepository,
+    scrapingJobRepository: ScrapingJobRepository,
+  ) {
+    super(
+      adapterRegistry,
+      unifiedExtractionService,
+      multiSiteArticleService,
+      dealPersistenceService,
+      puppeteerPool,
+      filterMatchingService,
+      categoryDiscoveryRegistry,
+      categoryRepository,
+      scrapingJobRepository,
+    );
+  }
+
   @Process('scrape')
   async handleScrapeJob(job: Job<MultiSiteScrapeJobData>): Promise<ProcessResult> {
     return super.handleScrapeJob(job);
@@ -343,6 +371,32 @@ export class DealabsScrapeProcessor extends BaseScrapeProcessor {
 export class VintedScrapeProcessor extends BaseScrapeProcessor {
   protected readonly site = SiteSource.VINTED;
 
+  // Explicit constructor required so NestJS emits DI metadata on this concrete
+  // class — see DealabsScrapeProcessor for details.
+  constructor(
+    adapterRegistry: AdapterRegistry,
+    unifiedExtractionService: UnifiedExtractionService,
+    multiSiteArticleService: MultiSiteArticleService,
+    dealPersistenceService: DealPersistenceService,
+    puppeteerPool: PuppeteerPoolService,
+    filterMatchingService: FilterMatchingService,
+    categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
+    categoryRepository: CategoryRepository,
+    scrapingJobRepository: ScrapingJobRepository,
+  ) {
+    super(
+      adapterRegistry,
+      unifiedExtractionService,
+      multiSiteArticleService,
+      dealPersistenceService,
+      puppeteerPool,
+      filterMatchingService,
+      categoryDiscoveryRegistry,
+      categoryRepository,
+      scrapingJobRepository,
+    );
+  }
+
   @Process('scrape')
   async handleScrapeJob(job: Job<MultiSiteScrapeJobData>): Promise<ProcessResult> {
     return super.handleScrapeJob(job);
@@ -361,6 +415,32 @@ export class VintedScrapeProcessor extends BaseScrapeProcessor {
 @Processor(getSiteQueueName(SiteSource.LEBONCOIN))
 export class LeBonCoinScrapeProcessor extends BaseScrapeProcessor {
   protected readonly site = SiteSource.LEBONCOIN;
+
+  // Explicit constructor required so NestJS emits DI metadata on this concrete
+  // class — see DealabsScrapeProcessor for details.
+  constructor(
+    adapterRegistry: AdapterRegistry,
+    unifiedExtractionService: UnifiedExtractionService,
+    multiSiteArticleService: MultiSiteArticleService,
+    dealPersistenceService: DealPersistenceService,
+    puppeteerPool: PuppeteerPoolService,
+    filterMatchingService: FilterMatchingService,
+    categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
+    categoryRepository: CategoryRepository,
+    scrapingJobRepository: ScrapingJobRepository,
+  ) {
+    super(
+      adapterRegistry,
+      unifiedExtractionService,
+      multiSiteArticleService,
+      dealPersistenceService,
+      puppeteerPool,
+      filterMatchingService,
+      categoryDiscoveryRegistry,
+      categoryRepository,
+      scrapingJobRepository,
+    );
+  }
 
   @Process('scrape')
   async handleScrapeJob(job: Job<MultiSiteScrapeJobData>): Promise<ProcessResult> {

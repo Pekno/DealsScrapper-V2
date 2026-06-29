@@ -98,10 +98,13 @@ describe('LlmExtractionService', () => {
     const result = await service.extract(req);
 
     // Assert
-    expect(result).toBe(mockListing);
+    expect(result.listing).toBe(mockListing);
     expect(mockPrepare).toHaveBeenCalledWith(req.listingHtml, req.sourceUrl);
     expect(mockOllamaGenerate).toHaveBeenCalledTimes(1);
     expect(mockSiteModule.validate).toHaveBeenCalledTimes(1);
+    // The prepared Markdown is forwarded to validate so site modules can
+    // deterministically backfill fields the model is unreliable at extracting.
+    expect(mockSiteModule.validate).toHaveBeenCalledWith({ title: 'Test' }, '## Deal markdown');
   });
 
   it('throws UnknownSiteError when site is not registered', async () => {

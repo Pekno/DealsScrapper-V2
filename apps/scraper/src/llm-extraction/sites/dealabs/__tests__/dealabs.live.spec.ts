@@ -48,7 +48,7 @@ const RUN_LIVE = process.env['LLM_TESTS'] === '1';
 
       const { listing: result } = await service.extract({
         siteId: SiteSource.DEALABS,
-        listingHtml: `<html><body>${example.markdown}</body></html>`,
+        listingHtml: example.html,
         sourceUrl: 'https://www.dealabs.com/groupe/high-tech',
       });
 

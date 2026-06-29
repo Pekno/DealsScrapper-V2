@@ -43,8 +43,9 @@ Extracting condition (REQUIRED):
   Examples: "état: Très bon état", "état: Bon état", "état: Neuf avec étiquette", "état: Satisfaisant"
 - After Markdown conversion the image line looks like: ![..., état: Très bon état, ...](url)
 - The condition is the French string immediately after "état:" and before the next ", " separator.
+- The condition is also repeated as a standalone line in the card body (e.g. a line that is exactly "Très bon état").
 - Extract the French condition string exactly as-is. Do not translate it.
-- If no "état:" pattern is present anywhere in the listing text, return null for condition.
+- condition is REQUIRED — every Vinted card shows it. You must always return the condition string.
 
 Extracting favoriteCount:
 - Extract favoriteCount as an integer from the favourites button aria-label or the count text next to the heart icon (e.g. "ajouté aux favoris par 18 utilisateurs" → 18, or the span text "18" next to the heart button).

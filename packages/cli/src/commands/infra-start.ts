@@ -53,6 +53,7 @@ export const infraStart = defineCommand({
             TEST_COMPOSE_FILE,
             ['up', '-d', ...INFRA_SERVICES, 'ollama-test-model-pull'],
             (line) => { task.output = line; },
+            { envFile: resolve(PROJECT_ROOT, '.env.test') },
           );
         },
       },

@@ -597,6 +597,10 @@ class ApiClient {
       {
         method: 'GET',
         headers: this.getAuthHeaders(),
+        // Bypass the browser HTTP cache so an edited filter never renders a
+        // stale 304-revalidated body (e.g. showing old matches after the
+        // filter criteria changed to match nothing).
+        cache: 'no-store',
       }
     );
 

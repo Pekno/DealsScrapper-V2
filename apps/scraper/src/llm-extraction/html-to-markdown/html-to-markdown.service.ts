@@ -6,6 +6,9 @@ import { scraperLogConfig } from '../../config/logging.config.js';
 
 const MAX_MARKDOWN_CHARS = 3500;
 
+/** Matches the LeBonCoin "featured listing" promo badge text exactly. */
+const FEATURED_BADGE_RE = /^(?:annonce\s+)?à\s+la\s+une\.?$/i;
+
 const TRACKING_ATTRS = [
   'data-analytics',
   'data-track',
@@ -46,10 +49,17 @@ export class HtmlToMarkdownService {
     // Strip noise elements
     $('script, style, svg, noscript, iframe, canvas').remove();
 
-    // Strip aria-hidden elements and screen-reader-only elements — they duplicate
-    // visible content and confuse the LLM (e.g. "Prix: 195 €.. Baisse de prix")
-    $('[aria-hidden="true"]').remove();
-    $('[class*="sr-only"], .sr-only').remove();
+    // NOTE: aria-hidden and sr-only (screen-reader-only) elements are intentionally
+    // KEPT. On some sites (notably LeBonCoin) the price and location values live
+    // ONLY inside these elements (e.g. <p class="sr-only">Prix: 195 €</p>,
+    // <p class="sr-only">Située à Le Cannet 06110.</p>) — stripping them removed the
+    // very fields we extract. Their text is clean, screen-reader-optimised, and a
+    // strong signal for the LLM, so we preserve it.
+    //
+    // The one exception is the "featured listing" promo badge ("À la une" /
+    // "Annonce à la une"), which is pure chrome the LLM otherwise mistakes for the
+    // title. Strip those specific leaf elements by their text content.
+    this.removeFeaturedBadges($);
 
     // Strip on* event attributes
     $('*').each((_i, el) => {
@@ -111,5 +121,21 @@ export class HtmlToMarkdownService {
     );
 
     return output;
+  }
+
+  /**
+   * Removes the LeBonCoin "featured listing" promo badge ("À la une" /
+   * "Annonce à la une"). It is rendered as a leaf element whose entire text is
+   * just the badge label; the small LLM otherwise mistakes it for the ad title.
+   * Matched on own-text only so we never remove a container that also holds the
+   * real title or other useful fields.
+   */
+  private removeFeaturedBadges($: cheerio.CheerioAPI): void {
+    $('span, p, div').each((_i, el) => {
+      const ownText = $(el).clone().children().remove().end().text().trim();
+      if (FEATURED_BADGE_RE.test(ownText)) {
+        $(el).remove();
+      }
+    });
   }
 }

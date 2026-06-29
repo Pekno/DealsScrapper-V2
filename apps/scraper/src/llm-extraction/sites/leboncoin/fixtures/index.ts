@@ -15,6 +15,6 @@ export function loadLeBonCoinFixtures(dir: string): LlmExample[] {
     const expectedRaw: unknown = JSON.parse(readFileSync(join(dir, `${name}.expected.json`), 'utf-8'));
     const expectedOutput = validateLeBonCoinListing(expectedRaw);
     const markdown = turndown.turndown(html);
-    return { markdown, expectedOutput };
+    return { html, markdown, expectedOutput };
   });
 }

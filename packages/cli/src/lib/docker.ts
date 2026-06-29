@@ -144,15 +144,19 @@ export function composeStream(
   composeFile: string,
   args: string[],
   onLine: (line: string) => void,
-  opts?: { cwd?: string },
+  opts?: { cwd?: string; envFile?: string },
 ): Promise<void> {
   return new Promise((res, rej) => {
     const cmd = getComposeCommand();
     const fullArgs = [
       ...cmd.slice(1),
       '-f', resolve(PROJECT_ROOT, composeFile),
-      ...args,
     ];
+    // Use the explicit env file (e.g. .env.test) for ${VAR} substitution so the
+    // test stack binds its own ports, instead of inheriting the dev-oriented
+    // root .env that docker compose auto-loads.
+    if (opts?.envFile) fullArgs.push('--env-file', opts.envFile);
+    fullArgs.push(...args);
 
     const child = winSpawn(cmd[0], fullArgs, {
       cwd: opts?.cwd ?? PROJECT_ROOT,
