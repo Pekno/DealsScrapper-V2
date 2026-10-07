@@ -85,4 +85,24 @@ export const SITE_URL_CONFIGS: Record<SiteSource, SiteUrlConfig> = {
       order: 'newest_first',
     },
   },
+
+  // ponytail: no URL-level filter optimization wired for the retail sites yet —
+  // empty config means scrape the plain category URL. Add price/sort params here
+  // once you confirm each site's live query-string format.
+  [SiteSource.ELECTRODEPOT]: {
+    universalFieldMappings: [],
+    universalParams: {},
+  },
+  [SiteSource.FNAC]: {
+    universalFieldMappings: [],
+    universalParams: {},
+  },
+  [SiteSource.DARTY]: {
+    universalFieldMappings: [],
+    universalParams: {},
+  },
+  [SiteSource.BOULANGER]: {
+    universalFieldMappings: [],
+    universalParams: {},
+  },
 };

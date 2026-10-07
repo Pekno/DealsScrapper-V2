@@ -32,34 +32,6 @@ interface SiteApiResponse {
 }
 
 /**
- * Fallback site registry for when API is unavailable
- * Used as default data while fetching
- */
-const FALLBACK_SITE_REGISTRY: SiteInfo[] = [
-  {
-    id: SiteSource.DEALABS,
-    name: 'dealabs',
-    displayName: 'Dealabs',
-    color: '#FF6B00',
-    isActive: true,
-  },
-  {
-    id: SiteSource.VINTED,
-    name: 'vinted',
-    displayName: 'Vinted',
-    color: '#09B1BA',
-    isActive: true,
-  },
-  {
-    id: SiteSource.LEBONCOIN,
-    name: 'leboncoin',
-    displayName: 'LeBonCoin',
-    color: '#4A90D9',
-    isActive: true,
-  },
-];
-
-/**
  * Query key for sites data
  */
 const SITES_QUERY_KEY = ['sites'] as const;
@@ -79,16 +51,21 @@ function transformApiResponse(apiSites: SiteApiResponse[]): SiteInfo[] {
 }
 
 /**
- * Fetch sites from API
+ * Fetch sites from API.
+ *
+ * GET /sites returns `{ sites: [...] }` (not a bare array), so the list lives
+ * under the `sites` key. Previously this passed the whole object to
+ * transformApiResponse(), which called `.map()` on it and threw — the query
+ * always errored and the UI silently fell back to a hardcoded 3-site list.
  */
 async function fetchSites(): Promise<SiteInfo[]> {
-  const response = await apiClient.get<SiteApiResponse[]>('/sites');
+  const response = await apiClient.get<{ sites: SiteApiResponse[] }>('/sites');
 
-  if (!response.success || !response.data) {
+  if (!response.success || !response.data?.sites) {
     throw new Error(response.error || 'Failed to fetch sites');
   }
 
-  return transformApiResponse(response.data);
+  return transformApiResponse(response.data.sites);
 }
 
 /**
@@ -101,19 +78,20 @@ export function useSiteRegistry() {
   const queryClient = useQueryClient();
 
   const {
-    data: sites = FALLBACK_SITE_REGISTRY,
+    data: sites = [],
     isLoading,
     error,
     refetch,
   } = useQuery({
     queryKey: SITES_QUERY_KEY,
     queryFn: fetchSites,
-    staleTime: 1000 * 60 * 60, // 1 hour - sites rarely change
+    // Sites come solely from GET /api/sites (the SiteSyncService source of truth).
+    // No hardcoded fallback — a hardcoded list silently goes stale every time a
+    // site is added. staleTime shortened so a newly-synced site shows promptly.
+    staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 60 * 24, // 24 hours cache time
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     retry: 2,
-    // Use fallback data while loading
-    placeholderData: FALLBACK_SITE_REGISTRY,
   });
 
   // Filter to only active sites

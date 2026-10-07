@@ -33,6 +33,10 @@ export const QUEUE_NAMES = {
   JOBS_DEALABS: getSiteQueueName(SiteSource.DEALABS),
   JOBS_VINTED: getSiteQueueName(SiteSource.VINTED),
   JOBS_LEBONCOIN: getSiteQueueName(SiteSource.LEBONCOIN),
+  JOBS_ELECTRODEPOT: getSiteQueueName(SiteSource.ELECTRODEPOT),
+  JOBS_FNAC: getSiteQueueName(SiteSource.FNAC),
+  JOBS_DARTY: getSiteQueueName(SiteSource.DARTY),
+  JOBS_BOULANGER: getSiteQueueName(SiteSource.BOULANGER),
 } as const;
 
 /**

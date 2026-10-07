@@ -248,8 +248,12 @@ export class PuppeteerPoolService implements OnModuleDestroy {
           timeout: timeout,
         });
 
-        // Remove cookie/consent popup elements from DOM
-        await this.removeCookieElements(page);
+        // Cookie/consent popup removal is intentionally NOT run here: the
+        // Fanboy filter list contains generic selectors that matched a
+        // structural/root node on Dealabs and removed it, collapsing the full
+        // page to an empty document. Cookie banners are irrelevant to HTML
+        // extraction (cheerio parses the markup downstream regardless), so the
+        // destructive DOM mutation is simply omitted on the extraction path.
 
         // Anti-detection: Add small delay after page load (human-like)
         await this.humanDelay(500, 1500);

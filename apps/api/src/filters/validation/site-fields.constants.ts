@@ -10,6 +10,17 @@ import { SiteSource } from '@dealscrapper/shared-types';
  * - Validate filter rules to ensure site-specific fields are only used when the corresponding site is enabled
  * - Provide user-friendly error messages when validation fails
  */
+/** Fields shared by every retail site (one ArticleRetail table). */
+const RETAIL_FIELDS = [
+  'originalPrice',
+  'merchant',
+  'rating',
+  'reviewCount',
+  'availability',
+  'ean',
+  'brand',
+] as const;
+
 export const SITE_SPECIFIC_FIELDS = {
   [SiteSource.DEALABS]: [
     // Community engagement
@@ -74,6 +85,12 @@ export const SITE_SPECIFIC_FIELDS = {
     // Flexible attributes
     'attributes',
   ],
+
+  // Shared by all retail sites — same field set, one per SiteSource for typing.
+  [SiteSource.ELECTRODEPOT]: RETAIL_FIELDS,
+  [SiteSource.FNAC]: RETAIL_FIELDS,
+  [SiteSource.DARTY]: RETAIL_FIELDS,
+  [SiteSource.BOULANGER]: RETAIL_FIELDS,
 } as const;
 
 /**
@@ -125,7 +142,8 @@ export const UNIVERSAL_FIELDS = [
 export type SiteSpecificField =
   | (typeof SITE_SPECIFIC_FIELDS)[SiteSource.DEALABS][number]
   | (typeof SITE_SPECIFIC_FIELDS)[SiteSource.VINTED][number]
-  | (typeof SITE_SPECIFIC_FIELDS)[SiteSource.LEBONCOIN][number];
+  | (typeof SITE_SPECIFIC_FIELDS)[SiteSource.LEBONCOIN][number]
+  | (typeof SITE_SPECIFIC_FIELDS)[SiteSource.ELECTRODEPOT][number];
 
 /**
  * Type for all universal field names
@@ -179,6 +197,14 @@ export function getSiteName(site: SiteSource): string {
       return 'Vinted';
     case SiteSource.LEBONCOIN:
       return 'LeBonCoin';
+    case SiteSource.ELECTRODEPOT:
+      return 'Électro Dépôt';
+    case SiteSource.FNAC:
+      return 'Fnac';
+    case SiteSource.DARTY:
+      return 'Darty';
+    case SiteSource.BOULANGER:
+      return 'Boulanger';
     default:
       return site;
   }

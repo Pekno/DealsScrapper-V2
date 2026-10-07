@@ -263,6 +263,31 @@ model ArticleLeBonCoin {
   @@map("article_leboncoin")
 }
 
+// Shared extension for retail product-listing sites (Électro Dépôt, and later
+// Fnac/Darty/Boulanger). One table for the whole family — they expose the same
+// product fields, only the adapter config differs. NO @relation (Wrapper pattern).
+model ArticleRetail {
+  articleId String @id // Links to Article.id
+
+  // Retail pricing/metadata
+  originalPrice Float? // Strikethrough / was-price
+  merchant      String? // Store/brand selling it (defaults to the site name)
+
+  // Product signals
+  rating       Float? // Average review score
+  reviewCount  Int? // Number of reviews
+  availability String? // "En stock", "Indisponible", "Sur commande", etc.
+  ean          String? // Barcode / GTIN when exposed
+  brand        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rating])
+  @@index([brand])
+  @@map("article_retail")
+}
+
 // Append-only price history. NO @relation to Article (Wrapper pattern, consistent
 // with extension tables). Stores each observed price so we stop losing data when
 // Article.currentPrice is overwritten in place on each scrape.

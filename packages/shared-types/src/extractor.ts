@@ -11,7 +11,7 @@
  * `UniversalListing` interface — keep them in sync when either changes.
  */
 
-import { SiteSource } from './site-source.js';
+import { SiteSource, type RetailSiteSource } from './site-source.js';
 
 /**
  * Site discriminator used in extractor payloads.
@@ -69,10 +69,25 @@ export interface LeBonCoinData {
 }
 
 /**
+ * Retail product-listing fields, shared by all retail sites
+ * (Électro Dépôt today; Fnac/Darty/Boulanger reuse the same shape).
+ * `type` starts as a single literal so the existing per-`type` switches keep
+ * working; broaden it to a union of the retail SiteSources when adding siblings.
+ */
+export interface RetailData {
+  readonly type: RetailSiteSource;
+  readonly rating: number | null;
+  readonly reviewCount: number | null;
+  readonly availability: string | null;
+  readonly ean: string | null;
+  readonly brand: string | null;
+}
+
+/**
  * Discriminated union of site-specific data blocks.
  * Disambiguate with the `type` field.
  */
-export type SiteSpecificData = DealabsData | VintedData | LeBonCoinData;
+export type SiteSpecificData = DealabsData | VintedData | LeBonCoinData | RetailData;
 
 /**
  * Universal listing shape produced by the extractor.

@@ -26,6 +26,7 @@ import type {
   DealabsData,
   VintedData,
   LeBonCoinData,
+  RetailData,
 } from '../adapters/base/site-adapter.interface.js';
 
 export interface ArticleCreationResult {
@@ -391,6 +392,12 @@ export class MultiSiteArticleService {
       case SiteSource.LEBONCOIN:
         await this.createLeBonCoinExtension(tx, articleId, siteSpecificData);
         break;
+      case SiteSource.ELECTRODEPOT:
+      case SiteSource.FNAC:
+      case SiteSource.DARTY:
+      case SiteSource.BOULANGER:
+        await this.createRetailExtension(tx, articleId, siteSpecificData, listing);
+        break;
       default:
         throw new Error(
           `Unknown site type: ${(siteSpecificData as { type: string }).type}`,
@@ -451,6 +458,23 @@ export class MultiSiteArticleService {
             proSeller: siteSpecificData.proSeller ?? undefined,
             sellerName: siteSpecificData.sellerName,
             urgentFlag: siteSpecificData.urgentFlag ?? undefined,
+          },
+        });
+        break;
+      case SiteSource.ELECTRODEPOT:
+      case SiteSource.FNAC:
+      case SiteSource.DARTY:
+      case SiteSource.BOULANGER:
+        await tx.articleRetail.update({
+          where: { articleId },
+          data: {
+            originalPrice: listing.originalPrice,
+            merchant: listing.merchant,
+            rating: siteSpecificData.rating,
+            reviewCount: siteSpecificData.reviewCount ?? undefined,
+            availability: siteSpecificData.availability,
+            ean: siteSpecificData.ean,
+            brand: siteSpecificData.brand,
           },
         });
         break;
@@ -520,6 +544,28 @@ export class MultiSiteArticleService {
         proSeller: data.proSeller ?? undefined,
         sellerName: data.sellerName,
         urgentFlag: data.urgentFlag ?? undefined,
+      },
+    });
+  }
+
+  private async createRetailExtension(
+    tx: Prisma.TransactionClient,
+    articleId: string,
+    data: RetailData,
+    listing: UniversalListing,
+  ): Promise<void> {
+    // Shared by all retail siblings (Électro Dépôt today). originalPrice/merchant
+    // come from the base listing, the rest from the retail-specific data block.
+    await tx.articleRetail.create({
+      data: {
+        articleId,
+        originalPrice: listing.originalPrice,
+        merchant: listing.merchant,
+        rating: data.rating,
+        reviewCount: data.reviewCount ?? undefined,
+        availability: data.availability,
+        ean: data.ean,
+        brand: data.brand,
       },
     });
   }

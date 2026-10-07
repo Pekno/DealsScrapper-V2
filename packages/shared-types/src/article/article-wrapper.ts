@@ -4,17 +4,28 @@ import type {
   ArticleDealabs,
   ArticleVinted,
   ArticleLeBonCoin,
+  ArticleRetail,
 } from '@prisma/client';
 
 // Import SiteSource for use in this file and re-export for backward compatibility
 // with imports from '@dealscrapper/shared-types/article'
-import { SiteSource } from '../site-source.js';
+import { SiteSource, RETAIL_SITE_SOURCES } from '../site-source.js';
 export { SiteSource };
 
 /**
  * Discriminated union for site-specific extension data
  */
-export type SiteExtension = ArticleDealabs | ArticleVinted | ArticleLeBonCoin;
+export type SiteExtension =
+  | ArticleDealabs
+  | ArticleVinted
+  | ArticleLeBonCoin
+  | ArticleRetail;
+
+/**
+ * SiteSources that share the ArticleRetail extension table. Driven by the
+ * single source of truth in site-source.ts.
+ */
+const RETAIL_SOURCES: ReadonlySet<SiteSource> = new Set(RETAIL_SITE_SOURCES);
 
 /**
  * Exception thrown when an article or its extension is not found
@@ -75,6 +86,13 @@ export class ArticleWrapper {
    */
   isLeBonCoin(): this is ArticleWrapper & { extension: ArticleLeBonCoin } {
     return this.source === SiteSource.LEBONCOIN;
+  }
+
+  /**
+   * Type guard: Check if article is from a retail site (shared ArticleRetail table)
+   */
+  isRetail(): this is ArticleWrapper & { extension: ArticleRetail } {
+    return RETAIL_SOURCES.has(this.source);
   }
 
   /**
@@ -146,6 +164,22 @@ export class ArticleWrapper {
           );
         }
         extension = leboncoinExtension;
+        break;
+      }
+
+      case SiteSource.ELECTRODEPOT:
+      case SiteSource.FNAC:
+      case SiteSource.DARTY:
+      case SiteSource.BOULANGER: {
+        const retailExtension = await prisma.articleRetail.findUnique({
+          where: { articleId: id },
+        });
+        if (!retailExtension) {
+          throw new ArticleNotFoundException(
+            `ArticleRetail extension for article "${id}" not found`,
+          );
+        }
+        extension = retailExtension;
         break;
       }
 
@@ -260,6 +294,27 @@ export class ArticleWrapper {
       }
 
       for (const ext of leboncoinExtensions) {
+        extensionMap.set(ext.articleId, ext);
+      }
+    }
+
+    // Load Retail extensions across ALL retail siblings (Électro Dépôt, Fnac,
+    // Darty, Boulanger) — they share one article_retail table.
+    const retailIds = RETAIL_SITE_SOURCES.flatMap(
+      (src) => articlesBySource[src]?.map((a) => a.id) ?? [],
+    );
+    if (retailIds.length > 0) {
+      const retailExtensions = await prisma.articleRetail.findMany({
+        where: { articleId: { in: retailIds } },
+      });
+
+      if (retailExtensions.length !== retailIds.length) {
+        throw new ArticleNotFoundException(
+          `Some ArticleRetail extensions not found`,
+        );
+      }
+
+      for (const ext of retailExtensions) {
         extensionMap.set(ext.articleId, ext);
       }
     }

@@ -67,6 +67,10 @@ const SITE_LOG_LABEL: Record<SiteSource, string> = {
   [SiteSource.DEALABS]: 'Dealabs',
   [SiteSource.VINTED]: 'Vinted',
   [SiteSource.LEBONCOIN]: 'LeBonCoin',
+  [SiteSource.ELECTRODEPOT]: 'Électro Dépôt',
+  [SiteSource.FNAC]: 'Fnac',
+  [SiteSource.DARTY]: 'Darty',
+  [SiteSource.BOULANGER]: 'Boulanger',
 };
 
 /**
@@ -409,6 +413,51 @@ export class VintedScrapeProcessor extends BaseScrapeProcessor {
 }
 
 /**
+ * Électro Dépôt job processor
+ */
+@Injectable()
+@Processor(getSiteQueueName(SiteSource.ELECTRODEPOT))
+export class ElectroDepotScrapeProcessor extends BaseScrapeProcessor {
+  protected readonly site = SiteSource.ELECTRODEPOT;
+
+  // Explicit constructor required so NestJS emits DI metadata on this concrete
+  // class — see DealabsScrapeProcessor for details.
+  constructor(
+    adapterRegistry: AdapterRegistry,
+    unifiedExtractionService: UnifiedExtractionService,
+    multiSiteArticleService: MultiSiteArticleService,
+    dealPersistenceService: DealPersistenceService,
+    puppeteerPool: PuppeteerPoolService,
+    filterMatchingService: FilterMatchingService,
+    categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
+    categoryRepository: CategoryRepository,
+    scrapingJobRepository: ScrapingJobRepository,
+  ) {
+    super(
+      adapterRegistry,
+      unifiedExtractionService,
+      multiSiteArticleService,
+      dealPersistenceService,
+      puppeteerPool,
+      filterMatchingService,
+      categoryDiscoveryRegistry,
+      categoryRepository,
+      scrapingJobRepository,
+    );
+  }
+
+  @Process('scrape')
+  async handleScrapeJob(job: Job<MultiSiteScrapeJobData>): Promise<ProcessResult> {
+    return super.handleScrapeJob(job);
+  }
+
+  @Process('discovery')
+  async handleDiscoveryJob(job: Job<DiscoveryJobData>): Promise<DiscoveryResult> {
+    return super.handleDiscoveryJob(job);
+  }
+}
+
+/**
  * LeBonCoin job processor
  */
 @Injectable()
@@ -440,6 +489,101 @@ export class LeBonCoinScrapeProcessor extends BaseScrapeProcessor {
       categoryRepository,
       scrapingJobRepository,
     );
+  }
+
+  @Process('scrape')
+  async handleScrapeJob(job: Job<MultiSiteScrapeJobData>): Promise<ProcessResult> {
+    return super.handleScrapeJob(job);
+  }
+
+  @Process('discovery')
+  async handleDiscoveryJob(job: Job<DiscoveryJobData>): Promise<DiscoveryResult> {
+    return super.handleDiscoveryJob(job);
+  }
+}
+
+/**
+ * Retail processors (Fnac, Darty, Boulanger). Identical boilerplate to the
+ * others — only `site` differs. Each re-declares the constructor + handlers
+ * because @nestjs/bull scans one concrete class per queue (see DealabsScrapeProcessor).
+ */
+@Injectable()
+@Processor(getSiteQueueName(SiteSource.FNAC))
+export class FnacScrapeProcessor extends BaseScrapeProcessor {
+  protected readonly site = SiteSource.FNAC;
+
+  constructor(
+    adapterRegistry: AdapterRegistry,
+    unifiedExtractionService: UnifiedExtractionService,
+    multiSiteArticleService: MultiSiteArticleService,
+    dealPersistenceService: DealPersistenceService,
+    puppeteerPool: PuppeteerPoolService,
+    filterMatchingService: FilterMatchingService,
+    categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
+    categoryRepository: CategoryRepository,
+    scrapingJobRepository: ScrapingJobRepository,
+  ) {
+    super(adapterRegistry, unifiedExtractionService, multiSiteArticleService, dealPersistenceService, puppeteerPool, filterMatchingService, categoryDiscoveryRegistry, categoryRepository, scrapingJobRepository);
+  }
+
+  @Process('scrape')
+  async handleScrapeJob(job: Job<MultiSiteScrapeJobData>): Promise<ProcessResult> {
+    return super.handleScrapeJob(job);
+  }
+
+  @Process('discovery')
+  async handleDiscoveryJob(job: Job<DiscoveryJobData>): Promise<DiscoveryResult> {
+    return super.handleDiscoveryJob(job);
+  }
+}
+
+@Injectable()
+@Processor(getSiteQueueName(SiteSource.DARTY))
+export class DartyScrapeProcessor extends BaseScrapeProcessor {
+  protected readonly site = SiteSource.DARTY;
+
+  constructor(
+    adapterRegistry: AdapterRegistry,
+    unifiedExtractionService: UnifiedExtractionService,
+    multiSiteArticleService: MultiSiteArticleService,
+    dealPersistenceService: DealPersistenceService,
+    puppeteerPool: PuppeteerPoolService,
+    filterMatchingService: FilterMatchingService,
+    categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
+    categoryRepository: CategoryRepository,
+    scrapingJobRepository: ScrapingJobRepository,
+  ) {
+    super(adapterRegistry, unifiedExtractionService, multiSiteArticleService, dealPersistenceService, puppeteerPool, filterMatchingService, categoryDiscoveryRegistry, categoryRepository, scrapingJobRepository);
+  }
+
+  @Process('scrape')
+  async handleScrapeJob(job: Job<MultiSiteScrapeJobData>): Promise<ProcessResult> {
+    return super.handleScrapeJob(job);
+  }
+
+  @Process('discovery')
+  async handleDiscoveryJob(job: Job<DiscoveryJobData>): Promise<DiscoveryResult> {
+    return super.handleDiscoveryJob(job);
+  }
+}
+
+@Injectable()
+@Processor(getSiteQueueName(SiteSource.BOULANGER))
+export class BoulangerScrapeProcessor extends BaseScrapeProcessor {
+  protected readonly site = SiteSource.BOULANGER;
+
+  constructor(
+    adapterRegistry: AdapterRegistry,
+    unifiedExtractionService: UnifiedExtractionService,
+    multiSiteArticleService: MultiSiteArticleService,
+    dealPersistenceService: DealPersistenceService,
+    puppeteerPool: PuppeteerPoolService,
+    filterMatchingService: FilterMatchingService,
+    categoryDiscoveryRegistry: CategoryDiscoveryAdapterRegistry,
+    categoryRepository: CategoryRepository,
+    scrapingJobRepository: ScrapingJobRepository,
+  ) {
+    super(adapterRegistry, unifiedExtractionService, multiSiteArticleService, dealPersistenceService, puppeteerPool, filterMatchingService, categoryDiscoveryRegistry, categoryRepository, scrapingJobRepository);
   }
 
   @Process('scrape')

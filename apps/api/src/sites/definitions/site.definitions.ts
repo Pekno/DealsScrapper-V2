@@ -50,6 +50,30 @@ export const SITE_DEFINITIONS: Record<string, SiteDefinition> = {
     categoryDiscoveryUrl: 'https://www.leboncoin.fr/categories',
     color: '#4A90D9',
   },
+  electrodepot: {
+    name: 'Électro Dépôt',
+    baseUrl: 'https://www.electrodepot.fr',
+    categoryDiscoveryUrl: 'https://www.electrodepot.fr/sitemap-arbo.xml',
+    color: '#E2001A',
+  },
+  fnac: {
+    name: 'Fnac',
+    baseUrl: 'https://www.fnac.com',
+    categoryDiscoveryUrl: 'https://www.fnac.com',
+    color: '#E1A925',
+  },
+  darty: {
+    name: 'Darty',
+    baseUrl: 'https://www.darty.com',
+    categoryDiscoveryUrl: 'https://www.darty.com',
+    color: '#EE1C2E',
+  },
+  boulanger: {
+    name: 'Boulanger',
+    baseUrl: 'https://www.boulanger.com',
+    categoryDiscoveryUrl: 'https://www.boulanger.com/sitemap_categorie.xml',
+    color: '#E3001B',
+  },
 } as const;
 
 /**

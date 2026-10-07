@@ -6,6 +6,7 @@ import { LlmExtractionService } from './llm-extraction.service.js';
 import { DealabsSite } from './sites/dealabs/dealabs.site.js';
 import { VintedSite } from './sites/vinted/vinted.site.js';
 import { LeBonCoinSite } from './sites/leboncoin/leboncoin.site.js';
+import { ElectroDepotSite, FnacSite, DartySite, BoulangerSite } from './sites/retail/retail.site.js';
 
 @Module({
   imports: [OllamaModule, HtmlToMarkdownModule],
@@ -13,10 +14,22 @@ import { LeBonCoinSite } from './sites/leboncoin/leboncoin.site.js';
     DealabsSite,
     VintedSite,
     LeBonCoinSite,
+    ElectroDepotSite,
+    FnacSite,
+    DartySite,
+    BoulangerSite,
     {
       provide: LLM_SITE_MODULES,
-      useFactory: (dealabsSite: DealabsSite, vintedSite: VintedSite, lbcSite: LeBonCoinSite) => [dealabsSite, vintedSite, lbcSite],
-      inject: [DealabsSite, VintedSite, LeBonCoinSite],
+      useFactory: (
+        dealabsSite: DealabsSite,
+        vintedSite: VintedSite,
+        lbcSite: LeBonCoinSite,
+        electroDepotSite: ElectroDepotSite,
+        fnacSite: FnacSite,
+        dartySite: DartySite,
+        boulangerSite: BoulangerSite,
+      ) => [dealabsSite, vintedSite, lbcSite, electroDepotSite, fnacSite, dartySite, boulangerSite],
+      inject: [DealabsSite, VintedSite, LeBonCoinSite, ElectroDepotSite, FnacSite, DartySite, BoulangerSite],
     },
     LlmSiteRegistry,
     LlmExtractionService,

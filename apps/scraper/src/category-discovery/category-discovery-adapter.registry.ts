@@ -4,6 +4,12 @@ import { ICategoryDiscoveryAdapter } from './base/category-discovery-adapter.int
 import { DealabsCategoryDiscoveryAdapter } from './dealabs/dealabs-category-discovery.adapter.js';
 import { VintedCategoryDiscoveryAdapter } from './vinted/vinted-category-discovery.adapter.js';
 import { LeBonCoinCategoryDiscoveryAdapter } from './leboncoin/leboncoin-category-discovery.adapter.js';
+import { ElectroDepotCategoryDiscoveryAdapter } from './electrodepot/electrodepot-category-discovery.adapter.js';
+import {
+  FnacCategoryDiscoveryAdapter,
+  DartyCategoryDiscoveryAdapter,
+} from './retail/retail-static-discovery.js';
+import { BoulangerCategoryDiscoveryAdapter } from './boulanger/boulanger-category-discovery.adapter.js';
 
 /**
  * Registry for site-specific category discovery adapters
@@ -17,12 +23,20 @@ export class CategoryDiscoveryAdapterRegistry {
   constructor(
     private readonly dealabsAdapter: DealabsCategoryDiscoveryAdapter,
     private readonly vintedAdapter: VintedCategoryDiscoveryAdapter,
-    private readonly leboncoinAdapter: LeBonCoinCategoryDiscoveryAdapter
+    private readonly leboncoinAdapter: LeBonCoinCategoryDiscoveryAdapter,
+    private readonly electroDepotAdapter: ElectroDepotCategoryDiscoveryAdapter,
+    private readonly fnacAdapter: FnacCategoryDiscoveryAdapter,
+    private readonly dartyAdapter: DartyCategoryDiscoveryAdapter,
+    private readonly boulangerAdapter: BoulangerCategoryDiscoveryAdapter
   ) {
     this.adapters = new Map<string, ICategoryDiscoveryAdapter>();
     this.adapters.set(SiteSource.DEALABS, this.dealabsAdapter);
     this.adapters.set(SiteSource.VINTED, this.vintedAdapter);
     this.adapters.set(SiteSource.LEBONCOIN, this.leboncoinAdapter);
+    this.adapters.set(SiteSource.ELECTRODEPOT, this.electroDepotAdapter);
+    this.adapters.set(SiteSource.FNAC, this.fnacAdapter);
+    this.adapters.set(SiteSource.DARTY, this.dartyAdapter);
+    this.adapters.set(SiteSource.BOULANGER, this.boulangerAdapter);
 
     this.logger.log(
       `📦 Registered ${this.adapters.size} category discovery adapters: ${[...this.adapters.keys()].join(', ')}`

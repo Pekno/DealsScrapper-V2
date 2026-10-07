@@ -1,4 +1,4 @@
-import { SiteSource } from '@dealscrapper/shared-types';
+import { SiteSource, type RetailSiteSource } from '@dealscrapper/shared-types';
 import type { IUrlOptimizer } from './url-optimizer.interface.js';
 import type { IExpiryResolver } from './expiry-resolver.interface.js';
 
@@ -76,7 +76,7 @@ export interface UniversalListing {
   readonly siteSpecificData: SiteSpecificData;
 }
 
-export type SiteSpecificData = DealabsData | VintedData | LeBonCoinData;
+export type SiteSpecificData = DealabsData | VintedData | LeBonCoinData | RetailData;
 
 export interface DealabsData {
   type: typeof SiteSource.DEALABS;
@@ -115,4 +115,18 @@ export interface LeBonCoinData {
   shippingCost: number | null;
   condition: string | null;
   attributes: unknown | null;
+}
+
+/**
+ * Retail product-listing fields, shared by all retail sites (Électro Dépôt today;
+ * Fnac/Darty/Boulanger reuse the same shape). Mirror of the shared-types
+ * `RetailData` contract — keep them in sync.
+ */
+export interface RetailData {
+  type: RetailSiteSource;
+  rating: number | null;
+  reviewCount: number | null;
+  availability: string | null;
+  ean: string | null;
+  brand: string | null;
 }

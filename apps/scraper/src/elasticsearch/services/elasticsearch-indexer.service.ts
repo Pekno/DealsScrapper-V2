@@ -92,6 +92,15 @@ export interface ElasticsearchArticleDocument {
   leboncoin_shippingCost?: number | null;
   leboncoin_condition?: string | null;
   leboncoin_sellerName?: string | null;
+
+  // Retail-specific fields (Électro Dépôt and retail siblings)
+  retail_originalPrice?: number | null;
+  retail_merchant?: string | null;
+  retail_rating?: number | null;
+  retail_reviewCount?: number | null;
+  retail_availability?: string | null;
+  retail_ean?: string | null;
+  retail_brand?: string | null;
 }
 
 /**
@@ -434,6 +443,14 @@ export class ElasticsearchIndexerService implements OnModuleInit {
       doc.leboncoin_shippingCost = article.extension.shippingCost;
       doc.leboncoin_condition = article.extension.condition;
       doc.leboncoin_sellerName = article.extension.sellerName;
+    } else if (article.isRetail()) {
+      doc.retail_originalPrice = article.extension.originalPrice;
+      doc.retail_merchant = article.extension.merchant;
+      doc.retail_rating = article.extension.rating;
+      doc.retail_reviewCount = article.extension.reviewCount;
+      doc.retail_availability = article.extension.availability;
+      doc.retail_ean = article.extension.ean;
+      doc.retail_brand = article.extension.brand;
     }
 
     return doc;
