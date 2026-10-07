@@ -1,12 +1,14 @@
 import { config } from 'dotenv';
 import { PrismaService } from '@dealscrapper/database';
-import { type GenericRedisClientType, createClient } from 'redis';
+import { createClient } from 'redis';
 
 // Load test environment variables
 config({ path: '../../.env.test' });
 
+type TestRedisClient = ReturnType<typeof createClient>;
+
 let prisma: PrismaService;
-let redisClient: GenericRedisClientType;
+let redisClient: TestRedisClient;
 
 /**
  * E2E Test Setup with Real Services
@@ -193,7 +195,11 @@ expect.extend({
   },
 
   async toExistInDatabase(received, tableName: string) {
-    const record = await prisma[tableName].findUnique({
+    const delegates = prisma as unknown as Record<
+      string,
+      { findUnique: (args: { where: { id: unknown } }) => Promise<unknown> }
+    >;
+    const record = await delegates[tableName].findUnique({
       where: { id: received },
     });
 
@@ -216,6 +222,6 @@ declare global {
     }
   }
 
-  var testPrisma: PrismaClient;
-  var testRedis: any;
+  var testPrisma: PrismaService;
+  var testRedis: TestRedisClient;
 }

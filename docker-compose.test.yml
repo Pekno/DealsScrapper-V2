@@ -59,3 +59,43 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  # Ollama runtime — scraper reaches it via 127.0.0.1:${OLLAMA_PORT:-11435} in test
+  ollama-test:
+    image: ollama/ollama:0.21.1
+    container_name: test-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11435}:11434"
+    volumes:
+      - ollama_data_test:/root/.ollama
+    environment:
+      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_KV_CACHE_TYPE=q8_0
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # One-shot sidecar: waits for ollama-test to be healthy, pulls the
+  # configured model (cached in the volume so subsequent test runs are fast),
+  # then exits. Never restarts.
+  ollama-test-model-pull:
+    image: ollama/ollama:0.21.1
+    container_name: test-ollama-model-pull
+    restart: "no"
+    depends_on:
+      ollama-test:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama-test:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b-instruct}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - 'ollama pull "$${OLLAMA_MODEL}"'
+
+volumes:
+  ollama_data_test:

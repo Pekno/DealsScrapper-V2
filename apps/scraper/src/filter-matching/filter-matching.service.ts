@@ -303,36 +303,75 @@ export class FilterMatchingService {
 
     // Load ArticleWrappers with site-specific extension data for proper filter evaluation
     const articleIds = deals.map((deal) => deal.id);
-    let articleWrappers: ArticleWrapper[];
 
     try {
-      articleWrappers = await ArticleWrapper.loadMany(articleIds, this.prisma);
+      const articleWrappers = await ArticleWrapper.loadMany(
+        articleIds,
+        this.prisma
+      );
       this.logger.debug(
         `📦 Loaded ${articleWrappers.length} ArticleWrappers with extensions`
       );
-    } catch (error) {
-      this.logger.error(
-        `❌ Failed to load ArticleWrappers: ${(error as Error).message}`
-      );
-      // Fall back to processing without extensions (will miss site-specific fields)
-      this.logger.warn(
-        '⚠️ Falling back to base Article processing (site-specific fields unavailable)'
-      );
+
+      // Process each ArticleWrapper against the category-specific filters
       await Promise.all(
-        deals.map(async (deal) => {
-          await this.processSingleDealLegacy(deal, categoryFilters);
+        articleWrappers.map(async (wrapper) => {
+          await this.processSingleDeal(wrapper, categoryFilters);
         })
       );
+
+      return categoryFilters.length;
+    } catch (error) {
+      // ArticleWrapper.loadMany is all-or-nothing: a single missing/stale id
+      // (e.g. an article removed between persistence and matching, or carried
+      // over from a re-scrape) throws and would otherwise poison the WHOLE
+      // batch, stripping site-specific fields (e.g. temperature) from the
+      // articles that ARE present. Recover per-deal so present articles keep
+      // their extensions and only genuinely-missing ids degrade.
+      this.logger.warn(
+        `⚠️ Batch ArticleWrapper load failed (${(error as Error).message}); ` +
+          'recovering per-deal so present articles keep site-specific fields'
+      );
+      await this.processDealsResilient(deals, categoryFilters);
       return categoryFilters.length;
     }
+  }
 
-    // Process each ArticleWrapper against the category-specific filters
+  /**
+   * Resilient per-deal processing used when batch wrapper loading fails.
+   * Loads each deal's ArticleWrapper individually so a missing/stale id only
+   * degrades that single deal to base Article processing instead of dropping
+   * the entire batch to legacy processing (which loses site-specific fields).
+   * @param deals - Articles to process
+   * @param categoryFilters - Active filters for the category
+   */
+  private async processDealsResilient(
+    deals: Article[],
+    categoryFilters: Filter[]
+  ): Promise<void> {
+    const missingIds: string[] = [];
+
     await Promise.all(
-      articleWrappers.map(async (wrapper) => {
-        await this.processSingleDeal(wrapper, categoryFilters);
+      deals.map(async (deal) => {
+        try {
+          const wrapper = await ArticleWrapper.load(deal.id, this.prisma);
+          await this.processSingleDeal(wrapper, categoryFilters);
+        } catch (error) {
+          missingIds.push(deal.id);
+          this.logger.debug(
+            `Deal "${deal.id}" lacks loadable extension ` +
+              `(${(error as Error).message}); using base Article processing`
+          );
+          await this.processSingleDealLegacy(deal, categoryFilters);
+        }
       })
     );
 
-    return categoryFilters.length;
+    if (missingIds.length > 0) {
+      this.logger.warn(
+        `⚠️ ${missingIds.length}/${deals.length} deal(s) degraded to base ` +
+          `Article processing (site-specific fields unavailable): ${missingIds.join(', ')}`
+      );
+    }
   }
 }

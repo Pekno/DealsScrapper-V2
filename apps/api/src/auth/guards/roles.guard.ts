@@ -5,7 +5,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { AuthenticatedRequest, UserRole } from '@dealscrapper/shared-types';
+import type {
+  AuthenticatedRequest,
+  UserRole,
+} from '@dealscrapper/shared-types';
 import { ROLES_KEY } from '../decorators/roles.decorator.js';
 
 @Injectable()

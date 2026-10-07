@@ -85,7 +85,7 @@ describe('UserStatusService (Mock Tests)', () => {
           provide: ConfigService,
           useValue: {
             get: jest.fn().mockImplementation((key: string) => {
-              const config = {
+              const config: Record<string, number> = {
                 'status.cacheTimeoutMs': 300000, // 5 minutes
                 'status.activityTimeoutMs': 900000, // 15 minutes
                 'status.cleanupIntervalMs': 60000, // 1 minute

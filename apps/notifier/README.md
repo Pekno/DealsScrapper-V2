@@ -6,7 +6,7 @@ The Notifier Service is the **notification delivery backbone** of DealsScapper. 
 
 **Key Responsibilities:**
 - **Multi-Channel Delivery** - Routes notifications to WebSocket and/or Email based on user status and preferences
-- **BullMQ Queue Processing** - Consumes `deal-match-found`, `system-notification`, and `retry-notification` jobs
+- **BullMQ Queue Processing** - Consumes `deal-match-found`, `email-verification`, and `password-reset` jobs
 - **Unified Notification Payload** - Builds a single payload structure stored in the database and sent across all channels
 - **Delivery Tracking** - Records every attempt per channel with exponential backoff retries (1min, 5min, 15min)
 - **User Preference Enforcement** - Checks quiet hours, category toggles, score thresholds, blocked keywords, and daily limits
@@ -43,7 +43,7 @@ graph TD
     end
 
     E -- Enqueues deal-match-found --> B
-    F -- Enqueues system-notification --> B
+    F -- Enqueues email-verification / password-reset --> B
     A -- Consumes jobs --> B
     A -- Reads/writes notifications --> C
     A -- User status, delivery cache, rate limits --> D
@@ -62,7 +62,7 @@ apps/notifier/
 │   ├── health/                # Custom health service with WebSocket, delivery, and channel checks
 │   ├── jobs/                  # Scheduled cleanup job (daily at 2 AM UTC) and cleanup controller
 │   ├── notifications/         # REST API controllers for notification CRUD and email tracking pixel
-│   ├── processors/            # BullMQ queue processor for deal-match, system, and retry jobs
+│   ├── processors/            # BullMQ queue processor for deal-match, email-verification, and password-reset jobs
 │   ├── repositories/          # Notification and delivery tracking repositories (Prisma)
 │   ├── services/              # Core business services (delivery tracking, preferences, rate limiting, etc.)
 │   ├── templates/             # Handlebars + MJML email template engine with XSS sanitization
@@ -80,12 +80,12 @@ apps/notifier/
 
 ### NotificationProcessor (`processors/notification.processor.ts`)
 
-The core BullMQ processor that consumes jobs from the `notifications` queue. It handles three job types: `deal-match-found`, `system-notification`, and `retry-notification`. For each deal match, it fetches the user's real-time status from Redis via `UserStatusService`, evaluates notification permissions through `NotificationPreferencesService`, intersects preferred channels with healthy channels from `ChannelHealthService`, then builds a `UnifiedNotificationPayload` containing deal data, site-specific fields, and metadata. The payload is persisted once via `DeliveryTrackingService.createDelivery()` and then delivered to selected channels. Failed deliveries are automatically retried via `scheduleRetry()` with a 1-minute initial delay.
+The core BullMQ processor that consumes jobs from the `notifications` queue. It handles three job types: `deal-match-found`, `email-verification`, and `password-reset`. For each deal match, it fetches the user's real-time status from Redis via `UserStatusService`, evaluates notification permissions through `NotificationPreferencesService`, intersects preferred channels with healthy channels from `ChannelHealthService`, then builds a `UnifiedNotificationPayload` containing deal data, site-specific fields, and metadata. The payload is persisted once via `DeliveryTrackingService.createDelivery()` and then delivered to selected channels. Failed deliveries are automatically retried via `scheduleRetry()` with a 1-minute initial delay.
 
 **Key behaviors:**
 - Processes `deal-match-found` jobs with full preference/health evaluation pipeline
-- Processes `system-notification` jobs with urgency-based channel selection (high priority uses both channels)
-- Processes `retry-notification` jobs by re-attempting failed deliveries
+- Processes `email-verification` jobs with high-priority email delivery and exponential-backoff retries (2s, 4s, 8s)
+- Processes `password-reset` jobs with high-priority email delivery and exponential-backoff retries
 - Builds `UnifiedNotificationPayload` with site-specific fields (`brand`, `city`, `sellerName`) nested under `data.dealData.siteSpecific`
 - Intersects user-preferred channels with health-recommended channels; falls back to health recommendations for high-priority jobs
 - Records delivery attempts per channel and schedules retries on total failure
@@ -144,7 +144,7 @@ The central persistence and tracking layer for all notification deliveries. When
 - `createDelivery()` generates delivery ID, stores in both Redis and database
 - `recordAttempt()` tracks per-channel success/failure with attempt numbering
 - Exponential backoff retry scheduling: 1 minute, 5 minutes, 15 minutes
-- `getFailedDeliveriesForRetry()` scans Redis using `SCAN` (not `KEYS`) for production safety
+- `scheduleRetry()` schedules a delayed retry for a failed delivery (called by the processor on total failure)
 - `getUserDeliveryStats()` returns delivery rate metrics per user
 - `getOverallStats()` provides system-wide delivery analytics with type breakdown
 - `getNotifications()` returns paginated, unified-format notifications for the REST API
@@ -533,7 +533,7 @@ pnpm cli test unit
 The Scraper Worker enqueues `deal-match-found` jobs to the `notifications` BullMQ queue when a deal matches a user's filter. The job payload includes `userId`, `filterId`, `matchId`, `dealData` (with site-specific fields), `priority`, and `timestamp`.
 
 ### API Service -> Notifier
-The API Service can enqueue `system-notification` jobs for administrative or system-level notifications. The Notifier also shares the JWT authentication scheme with the API for REST endpoint access.
+The API Service enqueues `email-verification` and `password-reset` jobs to the `notifications` BullMQ queue for transactional auth emails. The Notifier also shares the JWT authentication scheme with the API for REST endpoint access.
 
 ### Notifier -> Web Frontend
 The Web Frontend connects to the `/notifications` Socket.IO namespace with a JWT token. It receives real-time `notification` events with the unified payload format and can manage preferences via WebSocket messages.

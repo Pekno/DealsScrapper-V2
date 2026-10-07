@@ -17,7 +17,6 @@ export function convertFilterExpressionForDb(
       rules: [],
       matchLogic: 'AND',
       minScore: 50,
-      scoreMode: 'weighted',
     };
   }
 
@@ -110,6 +109,5 @@ export function convertFilterExpressionFromDb(
     rules: [],
     matchLogic: 'AND',
     minScore: 50,
-    scoreMode: 'weighted',
   };
 }

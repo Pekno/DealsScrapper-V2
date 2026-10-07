@@ -44,7 +44,10 @@ export class AuthService {
    * @returns User object without password if valid, null if credentials are invalid
    * @throws UnauthorizedException if account is locked or email is not verified
    */
-  async validateUser(email: string, password: string): Promise<Omit<User, 'password'> | null> {
+  async validateUser(
+    email: string,
+    password: string
+  ): Promise<Omit<User, 'password'> | null> {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
@@ -172,7 +175,7 @@ export class AuthService {
         // Allow re-registration if email is not verified
         if (!existingUser.emailVerified) {
           logger.log(`🔄 Re-registration for unverified account: ${email}`);
-          
+
           // Validate password strength
           const passwordValidationStart = Date.now();
           this.validatePassword(password);
@@ -180,15 +183,18 @@ export class AuthService {
           logger.debug(
             `🔒 Password validation completed in ${passwordValidationTime}ms`
           );
-          
+
           // Hash new password
           const hashingStart = Date.now();
-          const hashedPassword = await bcryptjs.hash(password, this.BCRYPT_ROUNDS);
+          const hashedPassword = await bcryptjs.hash(
+            password,
+            this.BCRYPT_ROUNDS
+          );
           const hashingTime = Date.now() - hashingStart;
           logger.debug(
             `🔐 Password hashing (${this.BCRYPT_ROUNDS} rounds) completed in ${hashingTime}ms`
           );
-          
+
           // Update user with new credentials and names (if provided)
           const updateStart = Date.now();
           const updatedUser = await this.usersService.update(existingUser.id, {
@@ -198,7 +204,7 @@ export class AuthService {
           });
           const updateTime = Date.now() - updateStart;
           logger.debug(`👤 User update completed in ${updateTime}ms`);
-          
+
           // Re-send verification email
           const emailSendStart = Date.now();
           logger.debug(
@@ -212,7 +218,7 @@ export class AuthService {
           logger.debug(
             `📮 Email verification queuing completed in ${emailSendTime}ms`
           );
-          
+
           const registrationData = {
             user: {
               id: updatedUser.id,
@@ -225,18 +231,18 @@ export class AuthService {
             },
             nextStep: 'verify-email' as const,
           };
-          
+
           const totalTime = Date.now() - startTime;
           logger.log(
             `✅ Re-registration completed for ${email} in ${totalTime}ms`
           );
-          
+
           return createSuccessResponse(
             registrationData,
             'Registration successful. Please check your email to verify your account.'
           ) as RegistrationResponse;
         }
-        
+
         // Email is verified = account is claimed = reject
         logger.debug(`❌ User already exists for email: ${email} (verified)`);
         throw new ConflictException('User with this email already exists');
@@ -326,7 +332,9 @@ export class AuthService {
    * @returns New access token and expiration time
    * @throws UnauthorizedException if refresh token is invalid or expired
    */
-  async refreshToken(refreshToken: string): Promise<{ access_token: string; expires_in: string }> {
+  async refreshToken(
+    refreshToken: string
+  ): Promise<{ access_token: string; expires_in: string }> {
     const session = await this.prisma.userSession.findUnique({
       where: { refreshToken },
       include: { user: true },

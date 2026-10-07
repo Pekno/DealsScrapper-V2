@@ -11,6 +11,7 @@ export interface ExtractionResult {
   totalCount: number | undefined;
   source: string;
   categorySlug: string;
+  llmTimeMs: number;
 }
 
 /**
@@ -62,7 +63,7 @@ export class UnifiedExtractionService {
       );
 
       // Extract listings from HTML
-      const listings = adapter.extractListings(html, optimizedUrl);
+      const { listings, llmTimeMs } = await adapter.extractListings(html, optimizedUrl);
 
       // Extract total count if available
       const totalCount = adapter.extractElementCount(html);
@@ -79,6 +80,7 @@ export class UnifiedExtractionService {
         totalCount,
         source: adapter.siteId,
         categorySlug,
+        llmTimeMs,
       };
     } catch (error) {
       const errorMessage = (error as Error).message || 'Unknown error';

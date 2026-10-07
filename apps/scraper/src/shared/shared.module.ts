@@ -17,9 +17,6 @@ import {
 // Rule Engine Service (required by FilterEvaluationService)
 import { RuleEngineService } from '../filter-matching/rule-engine.service.js';
 
-// ElasticSearch Module (required by DealPersistenceService)
-import { DealElasticSearchModule } from '../elasticsearch/elasticsearch.module.js';
-
 // Notification Module (required by DealPersistenceService)
 import { NotificationModule } from '../notification/notification.module.js';
 
@@ -34,8 +31,6 @@ import { NotificationModule } from '../notification/notification.module.js';
  */
 @Module({
   imports: [
-    // Import ElasticSearch module for DealPersistenceService dependency
-    DealElasticSearchModule,
     // Import Notification module for DealPersistenceService dependency
     NotificationModule,
   ],

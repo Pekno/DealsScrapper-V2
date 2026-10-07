@@ -28,7 +28,10 @@ import {
   ApiNotFoundResponse,
   ApiForbiddenResponse,
 } from '@nestjs/swagger';
-import { FiltersService, type ScrapingStatusResponse } from './filters.service.js';
+import {
+  FiltersService,
+  type ScrapingStatusResponse,
+} from './filters.service.js';
 import { CreateFilterDto } from './dto/create-filter.dto.js';
 import { UpdateFilterDto } from './dto/update-filter.dto.js';
 import { FilterQueryDto } from './dto/filter-query.dto.js';

@@ -231,16 +231,17 @@ describe('Notification Cascade Deletion (E2E)', () => {
       await prisma.match.delete({ where: { id: match.id } });
 
       // System notification should still exist
-      const systemNotificationAfterDelete = await prisma.notification.findUnique(
-        {
+      const systemNotificationAfterDelete =
+        await prisma.notification.findUnique({
           where: { id: systemNotification.id },
-        }
-      );
+        });
       expect(systemNotificationAfterDelete).not.toBeNull();
       expect(systemNotificationAfterDelete?.matchId).toBeNull();
 
       // Clean up
-      await prisma.notification.delete({ where: { id: systemNotification.id } });
+      await prisma.notification.delete({
+        where: { id: systemNotification.id },
+      });
       await prisma.article.delete({ where: { id: article.id } });
       await prisma.filter.delete({ where: { id: filter.id } });
       await prisma.category.delete({ where: { id: category.id } });

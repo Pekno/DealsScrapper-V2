@@ -66,7 +66,8 @@ export class FilterResponseDto {
   categories: CategoryDto[];
 
   @ApiProperty({
-    description: 'Sites where this filter matches articles (derived from categories)',
+    description:
+      'Sites where this filter matches articles (derived from categories)',
     example: [SiteSource.DEALABS, SiteSource.VINTED],
     isArray: true,
   })

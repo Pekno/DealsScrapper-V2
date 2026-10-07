@@ -14,7 +14,6 @@ import { UserStatusService } from '../services/user-status.service.js';
 import { DeliveryTrackingService } from '../services/delivery-tracking.service.js';
 import { RateLimitingService } from '../services/rate-limiting.service.js';
 import { EmailService } from '../channels/email.service.js';
-import { TemplateService } from '../templates/template.service.js';
 import { ChannelHealthService } from '../services/channel-health.service.js';
 
 /**
@@ -54,10 +53,6 @@ export interface NotifierHealthData {
       healthy: boolean;
       provider?: string;
     };
-    templates: {
-      totalTemplates: number;
-      registeredTemplates: string[];
-    };
     overallHealth: 'healthy' | 'degraded' | 'unhealthy';
     recommendedChannels: number;
     degradedChannels: number;
@@ -77,7 +72,6 @@ export class NotifierHealthService extends BaseHealthService {
     private readonly deliveryTracking: DeliveryTrackingService,
     private readonly rateLimitingService: RateLimitingService,
     private readonly emailService: EmailService,
-    private readonly templateService: TemplateService,
     private readonly channelHealthService: ChannelHealthService,
     private readonly sharedConfig: SharedConfigService
   ) {
@@ -90,7 +84,6 @@ export class NotifierHealthService extends BaseHealthService {
     // Register custom dependency health checkers
     this.registerHealthChecker('websocket', () => this.checkWebSocket());
     this.registerHealthChecker('email', () => this.checkEmailService());
-    this.registerHealthChecker('templates', () => this.checkTemplates());
     this.registerHealthChecker('channels', () => this.checkChannels());
   }
 
@@ -138,7 +131,6 @@ export class NotifierHealthService extends BaseHealthService {
       },
       channels: {
         email: this.emailService.getProviderStatus(),
-        templates: this.templateService.getTemplateStats(),
         overallHealth: channelHealth.overall,
         recommendedChannels: channelHealth.recommendedChannels?.length || 0,
         degradedChannels: channelHealth.degradedChannels?.length || 0,
@@ -195,36 +187,6 @@ export class NotifierHealthService extends BaseHealthService {
       return 'healthy';
     } catch (error) {
       this.logger.error('Email service health check failed:', error);
-      return 'unhealthy';
-    }
-  }
-
-  /**
-   * Check template system health
-   */
-  private async checkTemplates(): Promise<DependencyStatus> {
-    try {
-      const templateStats = this.templateService.getTemplateStats();
-
-      if (!templateStats) {
-        return 'unhealthy';
-      }
-
-      // Check if templates are compiling successfully
-      const totalTemplates = templateStats.totalTemplates || 0;
-
-      if (totalTemplates === 0) {
-        return 'unhealthy';
-      }
-
-      // Check if we have registered templates
-      if (templateStats.registeredTemplates.length === 0) {
-        return 'degraded';
-      }
-
-      return 'healthy';
-    } catch (error) {
-      this.logger.error('Template system health check failed:', error);
       return 'unhealthy';
     }
   }

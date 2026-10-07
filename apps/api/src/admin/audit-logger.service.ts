@@ -38,12 +38,12 @@ export class AuditLoggerService {
     action: AuditAction,
     adminId: string,
     adminEmail: string,
-    details?: Record<string, unknown>,
+    details?: Record<string, unknown>
   ): void {
     const detailsStr = details ? ' | ' + JSON.stringify(details) : '';
     this.logger.log(
       `[AUDIT] ${action} | admin: ${adminEmail} (${adminId})${detailsStr}`,
-      'AuditLoggerService',
+      'AuditLoggerService'
     );
   }
 }

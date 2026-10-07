@@ -227,6 +227,7 @@ describe('FilterMatchingService (Simplified)', () => {
         imageUrl: null,
         isExpired: false,
         isCoupon: false,
+        location: null,
         siteId: 'dealabs',
         isActive: true,
         scrapedAt: new Date(),

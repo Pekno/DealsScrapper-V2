@@ -39,11 +39,24 @@ module.exports = {
       },
     },
     {
-      // Next.js specific configuration for web app
+      // Web app (Vite + React). ponytail: was Next.js — migrated to Vite, so the
+      // dead next/core-web-vitals + react/jsx-a11y extends (uninstalled) that broke
+      // lint repo-wide are gone; reuse the same TS recommended set as everything else.
       files: ['apps/web/**/*.{ts,tsx}'],
-      extends: ['next/core-web-vitals', 'next/typescript'],
+      parser: '@typescript-eslint/parser',
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        project: ['./apps/web/tsconfig.json'],
+      },
+      plugins: ['@typescript-eslint'],
+      extends: [
+        'plugin:@typescript-eslint/recommended',
+        'plugin:@typescript-eslint/recommended-requiring-type-checking',
+        'prettier',
+      ],
       rules: {
-        // Downgrade some strict rules for Next.js development
+        // Downgrade some strict rules for web development
         '@typescript-eslint/no-misused-promises': 'warn',
         '@typescript-eslint/no-unsafe-assignment': 'warn',
         '@typescript-eslint/no-unsafe-argument': 'warn',
@@ -53,9 +66,6 @@ module.exports = {
         '@typescript-eslint/no-floating-promises': 'warn',
         '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
         '@typescript-eslint/explicit-function-return-type': 'warn',
-        'react-hooks/rules-of-hooks': 'warn',
-        'react/no-unescaped-entities': 'warn',
-        'jsx-a11y/role-has-required-aria-props': 'warn',
       },
     },
   ],

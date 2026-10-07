@@ -103,7 +103,7 @@ export class UserRepository
             orderBy: { createdAt: 'desc' },
           }),
         { where, pagination }
-      ) as Promise<User[]>,
+      ),
       this.count(where),
     ]);
 

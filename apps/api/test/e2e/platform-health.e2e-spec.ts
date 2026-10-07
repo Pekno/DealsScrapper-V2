@@ -187,7 +187,6 @@ describe('Deal Hunting Platform Health & Reliability', () => {
           ],
           matchLogic: 'AND',
           minScore: 50,
-          scoreMode: 'weighted',
         },
         active: true,
       };

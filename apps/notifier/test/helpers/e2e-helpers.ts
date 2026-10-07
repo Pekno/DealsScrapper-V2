@@ -12,6 +12,20 @@ import { createNotificationUser } from '../factories';
 
 import request from 'supertest';
 
+interface TestEmailServiceMock {
+  sendEmail: (options: {
+    to: string;
+    subject: string;
+    template: string;
+    data: unknown;
+  }) => Promise<unknown>;
+}
+
+declare global {
+  // eslint-disable-next-line no-var
+  var mockEmailService: TestEmailServiceMock | undefined;
+}
+
 export interface AuthenticatedUser {
   id: string;
   email: string;
@@ -154,10 +168,45 @@ async function createUserDirectly(
     id: user.id,
     email: user.email,
     token: 'mock-jwt-token-for-testing',
-    firstName: user.firstName,
-    lastName: user.lastName,
+    firstName: user.firstName ?? '',
+    lastName: user.lastName ?? '',
     password: userData.password,
   };
+}
+
+/**
+ * Deal data carried by a deal-match queue job built for tests.
+ */
+export interface SentNotificationDealData {
+  title: string;
+  price: number;
+  url: string;
+  imageUrl?: string;
+  score: number;
+  merchant: string;
+  temperature?: number;
+  discountPercentage?: number;
+  originalPrice?: number;
+}
+
+/**
+ * Normalized shape of the queue job data produced by {@link sendTestNotification}.
+ * Fields are optional because the helper supports deal-match, email-verification
+ * and system notification job formats from a single return type.
+ */
+export interface SentNotificationJobData {
+  userId: string;
+  filterId?: string;
+  matchId?: string;
+  dealData?: SentNotificationDealData;
+  priority?: string;
+  timestamp?: Date;
+  email?: string;
+  token?: string;
+  verificationUrl?: string;
+  type?: string;
+  subject?: string;
+  message?: string;
 }
 
 /**
@@ -189,7 +238,7 @@ export async function sendTestNotification(
   })();
 
   // Structure the job data according to what the processor expects
-  const jobData = (() => {
+  const jobData: SentNotificationJobData = (() => {
     if (notification.type === 'deal-match') {
       return {
         userId,

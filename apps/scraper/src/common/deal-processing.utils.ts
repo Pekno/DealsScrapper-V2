@@ -4,6 +4,17 @@ import type { Article } from '@dealscrapper/database';
 import type { ArticleDealabs, ArticleVinted, ArticleLeBonCoin } from '@prisma/client';
 
 /**
+ * A detected price drop between two observations of the same article.
+ * `amount` and `percentage` are always positive (a drop, not a rise).
+ */
+export interface PriceDrop {
+  readonly previousPrice: number;
+  readonly currentPrice: number;
+  readonly amount: number; // previousPrice - currentPrice
+  readonly percentage: number; // (amount / previousPrice) * 100, 2 decimals
+}
+
+/**
  * Utility functions for deal processing shared across multiple services
  * Contains common operations for deal conversion, validation, and utility functions
  */
@@ -19,9 +30,70 @@ export class DealProcessingUtils {
   }
 
   /**
-   * @deprecated This function is no longer used and has been removed.
-   * Use ArticleRepository.convertRawDealToArticleInput() instead for proper categoryId resolution.
+   * Detects a price drop between the last known price and a freshly-scraped one.
+   * Returns null when there is no usable drop: missing prices, a rise/no-change,
+   * or a non-positive previous price (no meaningful percentage). Foundation for
+   * price-drop alerts (Phase 6) and reused by whatever surfaces the drop.
+   * @param previous - Last recorded price (e.g. existing Article.currentPrice)
+   * @param current - Newly scraped price
+   * @returns The drop with amount + rounded percentage, or null if not a drop
    */
+  static computePriceDrop(
+    previous: number | null | undefined,
+    current: number | null | undefined,
+  ): PriceDrop | null {
+    if (previous == null || current == null) return null;
+    if (previous <= 0) return null; // can't derive a percentage from <= 0
+    if (current >= previous) return null; // not a drop
+    const amount = previous - current;
+    const percentage = Math.round((amount / previous) * 10000) / 100;
+    return { previousPrice: previous, currentPrice: current, amount, percentage };
+  }
+
+  /**
+   * Edge-triggered price-threshold crossing — PriceGhost's `target_price` done
+   * right, and the anti-spam half of the Phase 6 alert throttle. Returns true
+   * ONLY on the transition from at-or-above `threshold` to strictly below it, so
+   * a price that stays below (or oscillates while below) does not re-fire. The
+   * cooldown is the time-based complement; this is the value-based edge.
+   *
+   * Conservative on missing input: a first observation (no `previous`) never
+   * fires, so an already-cheap newly-discovered item can't spam an alert.
+   * @param previous - Last recorded price (null on first sighting)
+   * @param current - Newly scraped price
+   * @param threshold - Target price the user wants to be alerted below
+   * @returns true only when the price just crossed below the threshold
+   */
+  static crossedBelowThreshold(
+    previous: number | null | undefined,
+    current: number | null | undefined,
+    threshold: number | null | undefined,
+  ): boolean {
+    if (previous == null || current == null || threshold == null) return false;
+    return previous >= threshold && current < threshold;
+  }
+
+  /**
+   * Time-based anti-spam gate for price-drop alerts — the cooldown complement to
+   * the value-based `crossedBelowThreshold` edge. Returns true when a fresh alert
+   * MAY fire: either it has never alerted (no `lastNotifiedAt`) or the cooldown
+   * window has fully elapsed. A non-positive `cooldownMs` disables throttling
+   * (always-elapsed escape hatch). `now` is injected, not read from Date.now(),
+   * so the gate stays pure and deterministic for testing.
+   * @param lastNotifiedAt - When the last alert fired (null/undefined if never)
+   * @param now - Current instant (injected for determinism)
+   * @param cooldownMs - Minimum gap between alerts; <= 0 means no throttling
+   * @returns true if a new alert may fire now, false while inside the window
+   */
+  static cooldownElapsed(
+    lastNotifiedAt: Date | null | undefined,
+    now: Date,
+    cooldownMs: number,
+  ): boolean {
+    if (cooldownMs <= 0) return true; // throttling disabled
+    if (lastNotifiedAt == null) return true; // never alerted before
+    return now.getTime() - lastNotifiedAt.getTime() >= cooldownMs;
+  }
 
   /**
    * Validates if a raw deal has all required fields

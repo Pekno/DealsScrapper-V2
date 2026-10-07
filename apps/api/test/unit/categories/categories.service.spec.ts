@@ -3,9 +3,15 @@ import { SharedConfigService } from '@dealscrapper/shared-config';
 import { CategoriesService } from '../../../src/categories/categories.service';
 import { PrismaService } from '@dealscrapper/database';
 
+interface MockPrismaService {
+  category: {
+    findMany: jest.Mock;
+  };
+}
+
 describe('CategoriesService', () => {
   let service: CategoriesService;
-  let prisma: jest.Mocked<PrismaService>;
+  let prisma: MockPrismaService;
   let sharedConfigService: jest.Mocked<SharedConfigService>;
 
   // Mock category at level 0 (main tab)
@@ -25,7 +31,13 @@ describe('CategoriesService', () => {
     userCount: 100,
     createdAt: new Date('2025-01-01'),
     updatedAt: new Date('2025-01-01'),
-    site: { id: 'vinted', name: 'Vinted', color: '#09B1BA', isActive: true, iconUrl: null },
+    site: {
+      id: 'vinted',
+      name: 'Vinted',
+      color: '#09B1BA',
+      isActive: true,
+      iconUrl: null,
+    },
     parent: null,
   };
 
@@ -46,7 +58,13 @@ describe('CategoriesService', () => {
       userCount: 25,
       createdAt: new Date('2025-01-01'),
       updatedAt: new Date('2025-01-01'),
-      site: { id: 'dealabs', name: 'Dealabs', color: '#FF6B00', isActive: true, iconUrl: null },
+      site: {
+        id: 'dealabs',
+        name: 'Dealabs',
+        color: '#FF6B00',
+        isActive: true,
+        iconUrl: null,
+      },
       parent: null,
     },
     {
@@ -65,7 +83,13 @@ describe('CategoriesService', () => {
       userCount: 15,
       createdAt: new Date('2025-01-01'),
       updatedAt: new Date('2025-01-01'),
-      site: { id: 'dealabs', name: 'Dealabs', color: '#FF6B00', isActive: true, iconUrl: null },
+      site: {
+        id: 'dealabs',
+        name: 'Dealabs',
+        color: '#FF6B00',
+        isActive: true,
+        iconUrl: null,
+      },
       parent: { id: 'category-1', name: 'PC Gaming', parent: null },
     },
     {
@@ -84,12 +108,18 @@ describe('CategoriesService', () => {
       userCount: 50,
       createdAt: new Date('2025-01-01'),
       updatedAt: new Date('2025-01-01'),
-      site: { id: 'dealabs', name: 'Dealabs', color: '#FF6B00', isActive: true, iconUrl: null },
+      site: {
+        id: 'dealabs',
+        name: 'Dealabs',
+        color: '#FF6B00',
+        isActive: true,
+        iconUrl: null,
+      },
       parent: null,
     },
   ];
 
-  const mockPrismaService = {
+  const mockPrismaService: MockPrismaService = {
     category: {
       findMany: jest.fn(),
     },
@@ -103,7 +133,10 @@ describe('CategoriesService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CategoriesService,
-        { provide: PrismaService, useValue: mockPrismaService },
+        {
+          provide: PrismaService,
+          useValue: mockPrismaService as unknown as PrismaService,
+        },
         { provide: SharedConfigService, useValue: mockSharedConfigService },
       ],
     }).compile();
@@ -364,19 +397,19 @@ describe('CategoriesService', () => {
       expect(result).toHaveLength(3);
 
       // Level 1 category without parent
-      const pcGaming = result.find(c => c.id === 'category-1');
+      const pcGaming = result.find((c) => c.id === 'category-1');
       expect(pcGaming).toBeDefined();
       expect(pcGaming?.displayPath).toBe('PC Gaming'); // No parent, just name
       expect(pcGaming?.isSelectable).toBe(true); // Level 1 is selectable
 
       // Level 2 category with parent
-      const mobileGaming = result.find(c => c.id === 'category-2');
+      const mobileGaming = result.find((c) => c.id === 'category-2');
       expect(mobileGaming).toBeDefined();
       expect(mobileGaming?.displayPath).toBe('PC Gaming → Mobile Gaming'); // Parent → Name
       expect(mobileGaming?.isSelectable).toBe(true); // Level 2 is selectable
 
       // Another level 1 category
-      const electronics = result.find(c => c.id === 'category-3');
+      const electronics = result.find((c) => c.id === 'category-3');
       expect(electronics).toBeDefined();
       expect(electronics?.displayPath).toBe('Electronics'); // No parent, just name
       expect(electronics?.isSelectable).toBe(true); // Level 1 is selectable

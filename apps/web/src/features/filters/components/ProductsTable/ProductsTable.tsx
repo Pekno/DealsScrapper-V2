@@ -118,33 +118,41 @@ export const ProductsTable: React.FC<ProductsTableProps> = ({
 
       {/* Table Section */}
       <div className={tableStyles.tableWrapper}>
-        {loading ? (
-          <LoadingState message="Loading products..." />
-        ) : filteredArticles.length === 0 ? (
-          <EmptyState
-            searchTerm={searchTerm}
-            onClearSearch={onClearSearch}
-            message="No products found matching your criteria."
+        <table className={tableStyles.table} data-cy="matching-products-table">
+          <ProductsTableHead
+            sortConfig={sortConfig}
+            onSort={handleSort}
+            columns={visibleColumns}
           />
-        ) : (
-          <table className={tableStyles.table} data-cy="matching-products-table">
-            <ProductsTableHead
-              sortConfig={sortConfig}
-              onSort={handleSort}
-              columns={visibleColumns}
-            />
-            <tbody>
-              {filteredArticles.map((article) => (
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={visibleColumns.length}>
+                  <LoadingState message="Loading products..." />
+                </td>
+              </tr>
+            ) : filteredArticles.length === 0 ? (
+              <tr>
+                <td colSpan={visibleColumns.length}>
+                  <EmptyState
+                    searchTerm={searchTerm}
+                    onClearSearch={onClearSearch}
+                    message="No products found matching your criteria."
+                  />
+                </td>
+              </tr>
+            ) : (
+              filteredArticles.map((article) => (
                 <ProductsTableRow
                   key={article.id}
                   article={article}
                   columns={visibleColumns}
                   getSiteByName={getSiteByName}
                 />
-              ))}
-            </tbody>
-          </table>
-        )}
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
       {/* Pagination Section */}

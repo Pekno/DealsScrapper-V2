@@ -3,12 +3,15 @@ export * from './deals.js';
 export * from './scraping.js';
 export * from './filtering.js';
 export * from './filter-utils.js';
+export * from './filter-evaluator.js';
 export * from './enums.js';
 export * from './responses.js';
 export * from './auth.js';
 export * from './notifications.js';
 export * from './queues.js';
 export * from './site-source.js';
+export * from './extractor.js';
+export * from './product-suggestion.js';
 
 // Sites module (field definitions, filter rules, table columns)
 export * from './sites/index.js';

@@ -18,8 +18,7 @@ description: >
 {
   "rules": [ ...FilterRule | FilterRuleGroup ],
   "matchLogic": "AND" | "OR" | "NOT",  // How to combine top-level rules (default: AND)
-  "minScore": 75,                       // Minimum score threshold (0–100, default: 50)
-  "scoreMode": "weighted" | "percentage" | "points"  // Scoring strategy
+  "minScore": 75                        // Minimum score threshold (0–100, default: 50). Score is normalized 0-100.
 }
 ```
 
@@ -138,7 +137,6 @@ Rules with higher `weight` contribute more to the score — useful for "nice to 
 {
   "matchLogic": "AND",
   "minScore": 75,
-  "scoreMode": "weighted",
   "rules": [
     { "field": "title", "operator": "REGEX", "value": ".*(gaming|rtx|geforce).*laptop.*", "caseSensitive": false, "weight": 1.3 },
     { "field": "temperature", "operator": ">=", "value": 100, "weight": 2.0 },
@@ -160,7 +158,6 @@ Rules with higher `weight` contribute more to the score — useful for "nice to 
 {
   "matchLogic": "AND",
   "minScore": 60,
-  "scoreMode": "weighted",
   "rules": [
     { "field": "title", "operator": "REGEX", "value": ".*(nike|adidas).*", "caseSensitive": false, "weight": 1.5 },
     { "field": "title", "operator": "INCLUDES_ANY", "value": ["shoes", "sneakers", "chaussures", "baskets"], "caseSensitive": false, "weight": 1.2 },

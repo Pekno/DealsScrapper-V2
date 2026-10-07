@@ -75,7 +75,10 @@ describe('SitesService - Site Data Retrieval', () => {
   describe('findAll', () => {
     it('should return all active sites', async () => {
       // Arrange
-      mockPrismaService.site.findMany.mockResolvedValue([mockDealabsSite, mockVintedSite]);
+      mockPrismaService.site.findMany.mockResolvedValue([
+        mockDealabsSite,
+        mockVintedSite,
+      ]);
 
       // Act
       const result = await service.findAll();
@@ -159,9 +162,11 @@ describe('SitesService - Site Data Retrieval', () => {
       mockPrismaService.site.findUnique.mockResolvedValue(null);
 
       // Act & Assert
-      await expect(service.findOne('nonexistent')).rejects.toThrow(NotFoundException);
       await expect(service.findOne('nonexistent')).rejects.toThrow(
-        "Site with ID 'nonexistent' not found",
+        NotFoundException
+      );
+      await expect(service.findOne('nonexistent')).rejects.toThrow(
+        "Site with ID 'nonexistent' not found"
       );
     });
 
@@ -170,9 +175,11 @@ describe('SitesService - Site Data Retrieval', () => {
       mockPrismaService.site.findUnique.mockResolvedValue(mockLeBonCoinSite);
 
       // Act & Assert
-      await expect(service.findOne('leboncoin')).rejects.toThrow(NotFoundException);
       await expect(service.findOne('leboncoin')).rejects.toThrow(
-        "Site with ID 'leboncoin' is not active",
+        NotFoundException
+      );
+      await expect(service.findOne('leboncoin')).rejects.toThrow(
+        "Site with ID 'leboncoin' is not active"
       );
     });
   });
@@ -191,7 +198,9 @@ describe('SitesService - Site Data Retrieval', () => {
 
       // Assert
       expect(result).toHaveLength(3);
-      expect(result.some((s) => s.id === 'leboncoin' && !s.isActive)).toBe(true);
+      expect(result.some((s) => s.id === 'leboncoin' && !s.isActive)).toBe(
+        true
+      );
       expect(mockPrismaService.site.findMany).toHaveBeenCalledWith({
         orderBy: { name: 'asc' },
       });

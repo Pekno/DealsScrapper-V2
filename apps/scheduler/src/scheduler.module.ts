@@ -58,9 +58,6 @@ import { SchedulerDebugController } from './scheduler.controller.debug.js';
       }),
       inject: [SharedConfigService],
     }),
-    BullModule.registerQueue(
-      { name: 'jobs' } // Single consolidated queue
-    ),
     PrismaModule,
     // Shared health module with scheduler-specific health service
     SharedHealthModule.forRootAsync({

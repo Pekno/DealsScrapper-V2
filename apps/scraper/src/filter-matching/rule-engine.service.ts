@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { RawDeal } from '@dealscrapper/shared-types';
+import { RawDeal, evaluateFilterOperator } from '@dealscrapper/shared-types';
 import { extractErrorMessage } from '@dealscrapper/shared';
 import {
   FilterRule,
@@ -22,13 +22,7 @@ const RULE_ENGINE_CONFIG = {
   DEFAULTS: {
     WEIGHT: 1.0,
     MATCH_LOGIC: 'AND' as const,
-    SCORE_MODE: 'weighted' as const,
     CASE_SENSITIVE: false,
-  },
-  /** Regular expression flags */
-  REGEX_FLAGS: {
-    CASE_SENSITIVE: 'g',
-    CASE_INSENSITIVE: 'gi',
   },
   /** Time conversion constants */
   TIME_CONVERSION: {
@@ -44,9 +38,6 @@ const RULE_ENGINE_CONFIG = {
       /\b(apple|samsung|sony|lg|dell|hp|asus|acer|lenovo|microsoft|nintendo|xbox|playstation)\b/i,
   },
 } as const;
-
-/** Types for strict score mode validation */
-type ScoreMode = 'weighted' | 'percentage' | 'points';
 
 /** Enhanced rule evaluation result with comprehensive match details */
 export interface RuleEvaluationResult {
@@ -99,12 +90,9 @@ export class RuleEngineService {
         matchLogic
       );
 
-      const scoreMode =
-        expression.scoreMode ?? RULE_ENGINE_CONFIG.DEFAULTS.SCORE_MODE;
       const finalScore = this.calculateFinalScore(
         evaluationContext.totalScore,
-        evaluationContext.maxPossibleScore,
-        scoreMode
+        evaluationContext.maxPossibleScore
       );
 
       const minScoreThreshold =
@@ -263,152 +251,7 @@ export class RuleEngineService {
     ruleValue: unknown,
     caseSensitive: boolean = false
   ): boolean {
-    // Handle null/undefined field values with specific operator compatibility
-    if (fieldValue === null || fieldValue === undefined) {
-      return this.evaluateNullFieldValue(operator);
-    }
-
-    return this.evaluateOperatorByType(
-      operator,
-      fieldValue,
-      ruleValue,
-      caseSensitive
-    );
-  }
-
-  /**
-   * Evaluate operators by type category for better organization.
-   */
-  private evaluateOperatorByType(
-    operator: FilterOperator,
-    fieldValue: unknown,
-    ruleValue: unknown,
-    caseSensitive: boolean
-  ): boolean {
-    switch (operator) {
-      // Numeric operators
-      case '=':
-      case 'EQUALS':
-        return fieldValue === ruleValue;
-      case '!=':
-      case 'NOT_EQUALS':
-        return fieldValue !== ruleValue;
-      case '>':
-        return Number(fieldValue) > Number(ruleValue);
-      case '>=':
-        return Number(fieldValue) >= Number(ruleValue);
-      case '<':
-        return Number(fieldValue) < Number(ruleValue);
-      case '<=':
-        return Number(fieldValue) <= Number(ruleValue);
-
-      // String operators
-      case 'CONTAINS': {
-        const search = caseSensitive ? String(ruleValue) : String(ruleValue).toLowerCase();
-        return this.evaluateStringOperation(
-          fieldValue,
-          (field) => field.includes(search),
-          caseSensitive
-        );
-      }
-      case 'NOT_CONTAINS': {
-        const search = caseSensitive ? String(ruleValue) : String(ruleValue).toLowerCase();
-        return this.evaluateStringOperation(
-          fieldValue,
-          (field) => !field.includes(search),
-          caseSensitive
-        );
-      }
-      case 'STARTS_WITH': {
-        const search = caseSensitive ? String(ruleValue) : String(ruleValue).toLowerCase();
-        return this.evaluateStringOperation(
-          fieldValue,
-          (field) => field.startsWith(search),
-          caseSensitive
-        );
-      }
-      case 'ENDS_WITH': {
-        const search = caseSensitive ? String(ruleValue) : String(ruleValue).toLowerCase();
-        return this.evaluateStringOperation(
-          fieldValue,
-          (field) => field.endsWith(search),
-          caseSensitive
-        );
-      }
-      case 'REGEX':
-        return this.evaluateRegexOperation(
-          fieldValue,
-          ruleValue,
-          caseSensitive,
-          false
-        );
-      case 'NOT_REGEX':
-        return this.evaluateRegexOperation(
-          fieldValue,
-          ruleValue,
-          caseSensitive,
-          true
-        );
-
-      // Array operators
-      case 'IN':
-        return Array.isArray(ruleValue) && ruleValue.includes(fieldValue);
-      case 'NOT_IN':
-        return Array.isArray(ruleValue) && !ruleValue.includes(fieldValue);
-      case 'INCLUDES_ANY':
-        return this.evaluateIncludesAny(fieldValue, ruleValue, caseSensitive);
-      case 'INCLUDES_ALL':
-        return this.evaluateIncludesAll(fieldValue, ruleValue, caseSensitive);
-      case 'NOT_INCLUDES_ANY':
-        return this.evaluateNotIncludesAny(
-          fieldValue,
-          ruleValue,
-          caseSensitive
-        );
-
-      // Boolean operators
-      case 'IS_TRUE':
-        return Boolean(fieldValue) === true;
-      case 'IS_FALSE':
-        return Boolean(fieldValue) === false;
-
-      // Range operators (works for numeric values, prices, temperatures, timestamps, etc.)
-      case 'BETWEEN':
-        if (!Array.isArray(ruleValue) || ruleValue.length !== 2) return false;
-        const numericValue = Number(fieldValue);
-        const numericMin = Number(ruleValue[0]);
-        const numericMax = Number(ruleValue[1]);
-        return numericValue >= numericMin && numericValue <= numericMax;
-
-      // Date operators
-      case 'BEFORE':
-        return new Date(String(fieldValue)) < new Date(String(ruleValue));
-      case 'AFTER':
-        return new Date(String(fieldValue)) > new Date(String(ruleValue));
-      case 'OLDER_THAN':
-        return this.evaluateAgeComparison(fieldValue, ruleValue, 'older');
-      case 'NEWER_THAN':
-        return this.evaluateAgeComparison(fieldValue, ruleValue, 'newer');
-
-      default:
-        throw new Error(`Unknown operator: ${String(operator)}`);
-    }
-  }
-
-  /**
-   * Helper for case-sensitive string operations with proper type handling.
-   * @param fieldValue - Value to convert to string for operation
-   * @param operation - String operation function to apply
-   * @param caseSensitive - Whether to preserve original case
-   * @returns Result of the string operation
-   */
-  private evaluateStringOperation(
-    fieldValue: unknown,
-    operation: (field: string) => boolean,
-    caseSensitive: boolean
-  ): boolean {
-    const field = String(fieldValue);
-    return operation(caseSensitive ? field : field.toLowerCase());
+    return evaluateFilterOperator(operator, fieldValue, ruleValue, caseSensitive);
   }
 
   /**
@@ -435,27 +278,16 @@ export class RuleEngineService {
   }
 
   /**
-   * Calculate final score based on scoring mode and total possible points.
-   * Supports weighted, percentage, and raw points scoring methods.
+   * Calculate final score by normalizing the accumulated score to a 0-100 scale.
    * @param totalScore - Accumulated score from all matching rules
    * @param maxPossibleScore - Maximum possible score from all rules
-   * @param scoreMode - Scoring calculation method to apply
-   * @returns Final calculated score value
+   * @returns Final calculated score value (0-100)
    */
   private calculateFinalScore(
     totalScore: number,
-    maxPossibleScore: number,
-    scoreMode: ScoreMode
+    maxPossibleScore: number
   ): number {
-    switch (scoreMode) {
-      case 'percentage':
-        return maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
-      case 'points':
-        return totalScore;
-      case 'weighted':
-      default:
-        return maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
-    }
+    return maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
   }
 
   // =====================================
@@ -639,19 +471,21 @@ export class RuleEngineService {
 
   /**
    * Create result for expressions with no rules defined.
+   * Phase 7 convergence (V2): an empty rule set matches NOTHING, aligning with
+   * the API engine. A filter with no rules should never spam every deal.
    */
   private createNoRulesResult(): RuleEvaluationResult {
     return {
-      matches: true,
-      score: RULE_ENGINE_CONFIG.SCORING.NO_RULES_SCORE,
+      matches: false,
+      score: 0,
       maxPossibleScore: RULE_ENGINE_CONFIG.SCORING.NO_RULES_SCORE,
       details: [
         {
           rule: { field: 'title', operator: 'EQUALS', value: true },
-          matches: true,
-          score: RULE_ENGINE_CONFIG.SCORING.NO_RULES_SCORE,
+          matches: false,
+          score: 0,
           weight: RULE_ENGINE_CONFIG.DEFAULTS.WEIGHT,
-          reason: 'No rules defined - matches all',
+          reason: 'No rules defined - matches nothing',
         },
       ],
     };
@@ -842,121 +676,5 @@ export class RuleEngineService {
       default:
         return undefined;
     }
-  }
-
-  /**
-   * Evaluate null/undefined field values against operators.
-   */
-  private evaluateNullFieldValue(operator: FilterOperator): boolean {
-    return (
-      operator === '!=' || operator === 'NOT_EQUALS' || operator === 'IS_FALSE'
-    );
-  }
-
-  /**
-   * Evaluate regex operations with error handling.
-   */
-  private evaluateRegexOperation(
-    fieldValue: unknown,
-    ruleValue: unknown,
-    caseSensitive: boolean,
-    negate: boolean
-  ): boolean {
-    try {
-      const flags = caseSensitive
-        ? RULE_ENGINE_CONFIG.REGEX_FLAGS.CASE_SENSITIVE
-        : RULE_ENGINE_CONFIG.REGEX_FLAGS.CASE_INSENSITIVE;
-      const regex = new RegExp(String(ruleValue), flags);
-      const result = regex.test(String(fieldValue));
-      return negate ? !result : result;
-    } catch {
-      return negate; // Return opposite of expectation on error
-    }
-  }
-
-  /**
-   * Evaluate INCLUDES_ANY array operation.
-   */
-  private evaluateIncludesAny(
-    fieldValue: unknown,
-    ruleValue: unknown,
-    caseSensitive: boolean
-  ): boolean {
-    if (!Array.isArray(ruleValue)) return false;
-
-    return ruleValue.some((val) =>
-      this.evaluateStringOperation(
-        fieldValue,
-        (field) => {
-          const searchValue = caseSensitive
-            ? String(val)
-            : String(val).toLowerCase();
-          return field.includes(searchValue);
-        },
-        caseSensitive
-      )
-    );
-  }
-
-  /**
-   * Evaluate INCLUDES_ALL array operation.
-   */
-  private evaluateIncludesAll(
-    fieldValue: unknown,
-    ruleValue: unknown,
-    caseSensitive: boolean
-  ): boolean {
-    if (!Array.isArray(ruleValue)) return false;
-
-    return ruleValue.every((val) => {
-      const searchValue = caseSensitive
-        ? String(val)
-        : String(val).toLowerCase();
-      return this.evaluateStringOperation(
-        fieldValue,
-        (field) => field.includes(searchValue),
-        caseSensitive
-      );
-    });
-  }
-
-  /**
-   * Evaluate NOT_INCLUDES_ANY array operation.
-   */
-  private evaluateNotIncludesAny(
-    fieldValue: unknown,
-    ruleValue: unknown,
-    caseSensitive: boolean
-  ): boolean {
-    if (!Array.isArray(ruleValue)) return true;
-
-    return !ruleValue.some((val) => {
-      const searchValue = caseSensitive
-        ? String(val)
-        : String(val).toLowerCase();
-      return this.evaluateStringOperation(
-        fieldValue,
-        (field) => field.includes(searchValue),
-        caseSensitive
-      );
-    });
-  }
-
-  /**
-   * Evaluate age-based comparisons (OLDER_THAN/NEWER_THAN).
-   */
-  private evaluateAgeComparison(
-    fieldValue: unknown,
-    ruleValue: unknown,
-    comparison: 'older' | 'newer'
-  ): boolean {
-    const ageHours = this.calculateDealAge({
-      publishedAt: fieldValue,
-    } as RawDeal);
-
-    const thresholdHours = Number(ruleValue);
-    return comparison === 'older'
-      ? ageHours > thresholdHours
-      : ageHours < thresholdHours;
   }
 }

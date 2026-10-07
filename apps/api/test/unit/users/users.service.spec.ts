@@ -61,10 +61,10 @@ describe('UsersService - User Profile & Preference Management', () => {
       const result = await service.findByEmail('test@example.com');
 
       // User Value: Account successfully located for authentication
-      expect(result.id).toBe('user-1');
-      expect(result.email).toBe('test@example.com');
-      expect(result.firstName).toBe('John');
-      expect(result.lastName).toBe('Doe');
+      expect(result!.id).toBe('user-1');
+      expect(result!.email).toBe('test@example.com');
+      expect(result!.firstName).toBe('John');
+      expect(result!.lastName).toBe('Doe');
     });
 
     it('should protect against access attempts with non-existent emails', async () => {
@@ -84,10 +84,10 @@ describe('UsersService - User Profile & Preference Management', () => {
       const result = await service.findById('user-1');
 
       // User Value: Account information available for personalization
-      expect(result.id).toBe('user-1');
-      expect(result.email).toBe('test@example.com');
-      expect(result.emailNotifications).toBe(true);
-      expect(result.weeklyDigest).toBe(true);
+      expect(result!.id).toBe('user-1');
+      expect(result!.email).toBe('test@example.com');
+      expect(result!.emailNotifications).toBe(true);
+      expect(result!.weeklyDigest).toBe(true);
     });
 
     it('should protect against unauthorized account access', async () => {

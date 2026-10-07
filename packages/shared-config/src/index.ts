@@ -11,8 +11,10 @@ export type {
   DatabaseConfig,
   JwtConfig,
   EmailConfig,
+  OllamaConfig,
 } from './interfaces/config.interface.js';
 export {
   DEFAULT_REDIS_CONFIG,
   defaultRedisRetryStrategy,
+  DEFAULT_OLLAMA_CONFIG,
 } from './interfaces/config.interface.js';

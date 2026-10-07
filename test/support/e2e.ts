@@ -16,6 +16,10 @@ beforeEach(() => {
   cy.clearCookies();
   cy.clearLocalStorage();
 
+  // Drain in-flight scrape/match jobs BEFORE cleanup so a slow job from the
+  // previous test cannot create matches against articles we are about to delete.
+  cy.task('queue:drainScrape');
+
   // Reset database state before each test
   cy.task('db:cleanup');
 

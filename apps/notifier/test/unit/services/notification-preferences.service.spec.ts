@@ -3,9 +3,16 @@ import { Logger } from '@nestjs/common';
 import { NotificationPreferencesService } from '../../../src/services/notification-preferences.service.js';
 import { PrismaService } from '@dealscrapper/database';
 
+interface MockPrismaService {
+  user: {
+    findUnique: jest.Mock;
+    update: jest.Mock;
+  };
+}
+
 describe('NotificationPreferencesService', () => {
   let service: NotificationPreferencesService;
-  let prismaService: jest.Mocked<PrismaService>;
+  let prismaService: MockPrismaService;
 
   const mockUser = {
     id: 'user-123',
@@ -18,7 +25,7 @@ describe('NotificationPreferencesService', () => {
   };
 
   beforeEach(async () => {
-    const mockPrisma = {
+    const mockPrisma: MockPrismaService = {
       user: {
         findUnique: jest.fn(),
         update: jest.fn(),
@@ -33,7 +40,7 @@ describe('NotificationPreferencesService', () => {
     }).compile();
 
     service = module.get<NotificationPreferencesService>(NotificationPreferencesService);
-    prismaService = module.get(PrismaService);
+    prismaService = mockPrisma;
 
     jest.spyOn(Logger.prototype, 'log').mockImplementation();
     jest.spyOn(Logger.prototype, 'error').mockImplementation();

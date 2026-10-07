@@ -110,7 +110,7 @@ describe('Smart Notification Delivery Workflows', () => {
 
       // BUSINESS EXPECTATION: Notification pipeline processed the job
       expect(job).toBeDefined();
-      expect(job.data.dealData.title).toContain('MSI Gaming Laptop');
+      expect(job.data.dealData?.title).toContain('MSI Gaming Laptop');
 
       // For E2E testing, verify notification was queued and job data is correct
       // The actual delivery depends on email service integration which may not be available in test environment
@@ -214,7 +214,7 @@ describe('Smart Notification Delivery Workflows', () => {
 
       // BUSINESS EXPECTATION: WebSocket notification pipeline works for urgent deals
       expect(job).toBeDefined();
-      expect(job.data.dealData.title).toContain('RTX 4090');
+      expect(job.data.dealData?.title).toContain('RTX 4090');
       expect(job.data.priority).toBe('high');
 
       const jobState = await job.getState();
@@ -359,7 +359,7 @@ describe('Smart Notification Delivery Workflows', () => {
 
       // BUSINESS EXPECTATION: Personalized notification pipeline works
       expect(job).toBeDefined();
-      expect(job.data.dealData.title).toContain('Gaming');
+      expect(job.data.dealData?.title).toContain('Gaming');
       expect(personalizedNotification.data.category).toBe('Gaming Accessories');
 
       const jobState = await job.getState();
@@ -395,11 +395,11 @@ describe('Smart Notification Delivery Workflows', () => {
 
       // BUSINESS EXPECTATION: Complete deal information in notification pipeline
       expect(job).toBeDefined();
-      expect(job.data.dealData.title).toBe('Apple MacBook Pro M3 14-inch');
-      expect(job.data.dealData.price).toBe(1899);
+      expect(job.data.dealData?.title).toBe('Apple MacBook Pro M3 14-inch');
+      expect(job.data.dealData?.price).toBe(1899);
 
       const dealData = informativeDeal.data;
-      expect(dealData.originalPrice).toBeGreaterThan(dealData.currentPrice);
+      expect(dealData.originalPrice).toBeGreaterThan(dealData.currentPrice ?? 0);
       expect(dealData.discountPercentage).toBeGreaterThan(0);
       expect(dealData.dealUrl).toBeDefined();
 

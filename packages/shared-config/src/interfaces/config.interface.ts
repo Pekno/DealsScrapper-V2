@@ -178,3 +178,25 @@ export interface CorsConfig {
   /** Allowed origins */
   origins: string[];
 }
+
+/**
+ * Ollama LLM configuration
+ * Used by the extractor service to reach its Ollama backend
+ */
+export interface OllamaConfig {
+  /** Base URL of the Ollama server (e.g. http://ollama:11434) */
+  url: string;
+  /** Model identifier (default: qwen2.5:3b-instruct) */
+  model: string;
+  /** Maximum concurrent in-flight LLM calls (default: 2) */
+  concurrency: number;
+  /** Per-call timeout in milliseconds (default: 30000) */
+  timeoutMs: number;
+}
+
+/** Default Ollama configuration */
+export const DEFAULT_OLLAMA_CONFIG: Omit<OllamaConfig, 'url'> = {
+  model: 'qwen2.5:3b-instruct',
+  concurrency: 2,
+  timeoutMs: 30000,
+};

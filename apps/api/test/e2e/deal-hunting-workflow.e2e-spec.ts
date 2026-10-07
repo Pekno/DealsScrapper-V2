@@ -81,7 +81,8 @@ describe('Smart Deal Hunting Workflows', () => {
 
       // Filter should have price rule ≤ €800
       const priceRule = createdFilter.filterExpression.rules.find(
-        (rule) => rule.field === 'currentPrice'
+        (rule: { field: string; operator: string; value: number }) =>
+          rule.field === 'currentPrice'
       );
       expect(priceRule.operator).toBe('<=');
       expect(priceRule.value).toBe(800);
@@ -138,7 +139,8 @@ describe('Smart Deal Hunting Workflows', () => {
 
       // Should have discount rule ≥ 25%
       const discountRule = createdFilter.filterExpression.rules.find(
-        (rule) => rule.field === 'discountPercentage'
+        (rule: { field: string; operator: string; value: number }) =>
+          rule.field === 'discountPercentage'
       );
       expect(discountRule.value).toBe(25);
       expect(discountRule.operator).toBe('>=');
@@ -188,8 +190,12 @@ describe('Smart Deal Hunting Workflows', () => {
 
       const filters = filtersResponse.body.data.filters;
       expect(filters).toHaveLength(2);
-      expect(filters.some((f) => f.name.includes('Gaming'))).toBe(true);
-      expect(filters.some((f) => f.name.includes('Premium Tech'))).toBe(true);
+      expect(
+        filters.some((f: { name: string }) => f.name.includes('Gaming'))
+      ).toBe(true);
+      expect(
+        filters.some((f: { name: string }) => f.name.includes('Premium Tech'))
+      ).toBe(true);
     });
 
     it('allows users to pause filters when they want to reduce notifications', async () => {
@@ -274,8 +280,12 @@ describe('Smart Deal Hunting Workflows', () => {
 
       const categories = categoriesResponse.body.data;
       expect(categories.length).toBeGreaterThanOrEqual(2);
-      expect(categories.some((c) => c.name === 'Gaming Laptops')).toBe(true);
-      expect(categories.some((c) => c.name === 'Smartphones')).toBe(true);
+      expect(
+        categories.some((c: { name: string }) => c.name === 'Gaming Laptops')
+      ).toBe(true);
+      expect(
+        categories.some((c: { name: string }) => c.name === 'Smartphones')
+      ).toBe(true);
     });
   });
 

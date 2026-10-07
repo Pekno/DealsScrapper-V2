@@ -79,6 +79,20 @@ export interface UnifiedNotificationPayload {
   message: string;
   /** Foreign key to Match (for DEAL_MATCH notifications only) */
   matchId?: string;
+  /**
+   * Event-granular idempotency key set by the producer.
+   *
+   * Distinguishes notification EVENTS that share the same `matchId`. The scraper
+   * producer sets a deterministic value per event:
+   * - `deal-match-${matchId}` for the initial match notification
+   * - `deal-match-${matchId}-drop-${price}` for a price-drop re-alert
+   *
+   * When present, delivery dedup keys on `(userId, dedupKey)` instead of
+   * `(userId, matchId)`, so a genuine price drop is delivered while a re-detect
+   * of the same drop is deduped. When absent, dedup falls back to the legacy
+   * `(userId, matchId)` behavior.
+   */
+  dedupKey?: string;
   /** Associated filter ID (for DEAL_MATCH type) */
   filterId?: string;
   /** Structured notification data */

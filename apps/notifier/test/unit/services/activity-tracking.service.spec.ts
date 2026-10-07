@@ -79,7 +79,9 @@ describe('ActivityTrackingService (Mock Tests)', () => {
   let mockRedis: any;
 
   // Test data factories following the guidelines
-  const createTestUserActivity = (overrides = {}): UserActivity => ({
+  const createTestUserActivity = (
+    overrides: Partial<UserActivity> = {}
+  ): UserActivity => ({
     userId: 'user-123',
     activityType: 'mouse',
     timestamp: new Date('2024-01-15T10:00:00Z'),
@@ -136,7 +138,7 @@ describe('ActivityTrackingService (Mock Tests)', () => {
           provide: ConfigService,
           useValue: {
             get: jest.fn().mockImplementation((key: string) => {
-              const config = {
+              const config: Record<string, number> = {
                 'activity.retentionDays': 30,
                 'activity.sessionTimeoutMs': 1800000,
                 'activity.batchSize': 100,

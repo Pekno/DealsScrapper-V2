@@ -140,21 +140,25 @@ describe('SitesController - Sites API', () => {
     it('should propagate NotFoundException from service', async () => {
       // Arrange
       mockSitesService.findOne.mockRejectedValue(
-        new NotFoundException("Site with ID 'nonexistent' not found"),
+        new NotFoundException("Site with ID 'nonexistent' not found")
       );
 
       // Act & Assert
-      await expect(controller.findOne('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(controller.findOne('nonexistent')).rejects.toThrow(
+        NotFoundException
+      );
     });
 
     it('should handle inactive site error from service', async () => {
       // Arrange
       mockSitesService.findOne.mockRejectedValue(
-        new NotFoundException("Site with ID 'inactive-site' is not active"),
+        new NotFoundException("Site with ID 'inactive-site' is not active")
       );
 
       // Act & Assert
-      await expect(controller.findOne('inactive-site')).rejects.toThrow(NotFoundException);
+      await expect(controller.findOne('inactive-site')).rejects.toThrow(
+        NotFoundException
+      );
     });
   });
 });

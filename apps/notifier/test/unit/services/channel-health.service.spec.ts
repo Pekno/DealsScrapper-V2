@@ -48,6 +48,7 @@ describe('ChannelHealthService', () => {
       websocketGateway.getConnectionStats.mockReturnValue({
         totalConnections: 10,
         activeUsers: 5,
+        connections: [],
       });
 
       const result = await service.getChannelHealth();
@@ -62,6 +63,7 @@ describe('ChannelHealthService', () => {
       websocketGateway.getConnectionStats.mockReturnValue({
         totalConnections: 10,
         activeUsers: 5,
+        connections: [],
       });
 
       const result = await service.getChannelHealth();
@@ -76,10 +78,12 @@ describe('ChannelHealthService', () => {
         configured: true,
         healthy: true,
         provider: 'smtp',
+        lastCheck: new Date(),
       });
       websocketGateway.getConnectionStats.mockReturnValue({
         totalConnections: 10,
         activeUsers: 5,
+        connections: [],
       });
 
       const result = await service.getChannelMetrics();
@@ -100,6 +104,7 @@ describe('ChannelHealthService', () => {
       websocketGateway.getConnectionStats.mockReturnValue({
         totalConnections: 10,
         activeUsers: 5,
+        connections: [],
       });
 
       const result = await service.isChannelAvailable('websocket');
@@ -119,9 +124,10 @@ describe('ChannelHealthService', () => {
       websocketGateway.getConnectionStats.mockReturnValue({
         totalConnections: 10,
         activeUsers: 5,
+        connections: [],
       });
 
-      const result = await service.getRecommendedChannels();
+      const result = await service.getRecommendedChannels('user-123');
 
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
@@ -131,9 +137,10 @@ describe('ChannelHealthService', () => {
       websocketGateway.getConnectionStats.mockReturnValue({
         totalConnections: 10,
         activeUsers: 5,
+        connections: [],
       });
 
-      const result = await service.getRecommendedChannels();
+      const result = await service.getRecommendedChannels('user-123');
 
       // Email is always recommended since checkEmailHealth is deferred
       expect(result).toContain('email');
@@ -155,6 +162,7 @@ describe('ChannelHealthService', () => {
       websocketGateway.getConnectionStats.mockReturnValue({
         totalConnections: 10,
         activeUsers: 5,
+        connections: [],
       });
 
       const result = await service.isChannelAvailable('websocket');
@@ -166,6 +174,7 @@ describe('ChannelHealthService', () => {
       websocketGateway.getConnectionStats.mockReturnValue({
         totalConnections: 0,
         activeUsers: 0,
+        connections: [],
       });
 
       const result = await service.isChannelAvailable('websocket');
@@ -179,13 +188,13 @@ describe('ChannelHealthService', () => {
     it('should record delivery attempt for channel', async () => {
       // This is a void method that tracks metrics
       await expect(
-        service.recordDeliveryAttempt('email', true)
+        service.recordDeliveryAttempt('email', true, 120)
       ).resolves.not.toThrow();
     });
 
     it('should record failed delivery attempt', async () => {
       await expect(
-        service.recordDeliveryAttempt('websocket', false)
+        service.recordDeliveryAttempt('websocket', false, 250)
       ).resolves.not.toThrow();
     });
   });

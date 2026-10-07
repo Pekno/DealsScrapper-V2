@@ -338,7 +338,6 @@ describe('RuleEngineService', () => {
         ],
         matchLogic: 'AND',
         minScore: 75,
-        scoreMode: 'weighted',
       };
 
       const result = await service.evaluateFilterExpression(

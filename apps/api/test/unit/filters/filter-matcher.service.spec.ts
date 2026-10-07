@@ -7,16 +7,19 @@ import {
   FilterRule,
   FilterRuleGroup,
 } from '@dealscrapper/shared-types';
-import {
-  ArticleWrapper,
-  SiteSource,
-} from '@dealscrapper/shared-types/article';
+import { ArticleWrapper, SiteSource } from '@dealscrapper/shared-types/article';
 import { FilterMatcherService } from '../../../src/filters/services/filter-matcher.service.js';
 
 // Type-safe mock helpers for test data
-type MockArticleBase = Partial<Article> & Pick<Article, 'id' | 'siteId' | 'title' | 'url' | 'categoryId' | 'scrapedAt' | 'updatedAt'>;
-type MockDealabsExtension = Partial<ArticleDealabs> & Pick<ArticleDealabs, 'articleId'>;
-type MockVintedExtension = Partial<ArticleVinted> & Pick<ArticleVinted, 'articleId'>;
+type MockArticleBase = Partial<Article> &
+  Pick<
+    Article,
+    'id' | 'siteId' | 'title' | 'url' | 'categoryId' | 'scrapedAt' | 'updatedAt'
+  >;
+type MockDealabsExtension = Partial<ArticleDealabs> &
+  Pick<ArticleDealabs, 'articleId'>;
+type MockVintedExtension = Partial<ArticleVinted> &
+  Pick<ArticleVinted, 'articleId'>;
 
 // Filter with categories relation for test mocks
 interface MockFilterCategory {
@@ -43,9 +46,19 @@ interface MockFilterWithCategories {
   updatedAt?: Date;
 }
 
+// Structural mock for PrismaService. jest.Mocked<PrismaService> cannot deeply
+// mock Prisma's generated delegate methods (findMany resolves to the real
+// PrismaPromise signature, which lacks jest.Mock helpers like mockResolvedValue),
+// so the delegate method is typed explicitly as jest.Mock.
+interface MockPrismaService {
+  filter: {
+    findMany: jest.Mock;
+  };
+}
+
 describe('FilterMatcherService', () => {
   let service: FilterMatcherService;
-  let mockPrisma: jest.Mocked<PrismaService>;
+  let mockPrisma: MockPrismaService;
 
   // Mock test data - Dealabs article
   const mockDealabsArticleBase: MockArticleBase = {
@@ -85,7 +98,7 @@ describe('FilterMatcherService', () => {
   const mockDealabsArticle = new ArticleWrapper(
     mockDealabsArticleBase as Article,
     mockDealabsExtension as ArticleDealabs,
-    SiteSource.DEALABS,
+    SiteSource.DEALABS
   );
 
   // Mock test data - Vinted article
@@ -127,7 +140,7 @@ describe('FilterMatcherService', () => {
   const mockVintedArticle = new ArticleWrapper(
     mockVintedArticleBase as Article,
     mockVintedExtension as ArticleVinted,
-    SiteSource.VINTED,
+    SiteSource.VINTED
   );
 
   beforeEach(async () => {
@@ -136,14 +149,14 @@ describe('FilterMatcherService', () => {
       filter: {
         findMany: jest.fn(),
       },
-    } as unknown as jest.Mocked<PrismaService>;
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FilterMatcherService,
         {
           provide: PrismaService,
-          useValue: mockPrisma,
+          useValue: mockPrisma as unknown as PrismaService,
         },
       ],
     }).compile();
@@ -169,7 +182,12 @@ describe('FilterMatcherService', () => {
         filterExpression: {
           rules: [
             { field: 'currentPrice', operator: '<=', value: 1500 },
-            { field: 'title', operator: 'CONTAINS', value: 'RTX', caseSensitive: false },
+            {
+              field: 'title',
+              operator: 'CONTAINS',
+              value: 'RTX',
+              caseSensitive: false,
+            },
           ],
           matchLogic: 'AND',
         },
@@ -178,7 +196,11 @@ describe('FilterMatcherService', () => {
             id: 'fc-1',
             filterId: 'filter-1',
             categoryId: 'cat-1',
-            category: { id: 'cat-1', siteId: 'dealabs', site: { id: 'dealabs' } },
+            category: {
+              id: 'cat-1',
+              siteId: 'dealabs',
+              site: { id: 'dealabs' },
+            },
           },
         ],
       };
@@ -226,7 +248,12 @@ describe('FilterMatcherService', () => {
         filterExpression: {
           rules: [
             { field: 'currentPrice', operator: '<=', value: 50 },
-            { field: 'title', operator: 'CONTAINS', value: 'Nike', caseSensitive: false },
+            {
+              field: 'title',
+              operator: 'CONTAINS',
+              value: 'Nike',
+              caseSensitive: false,
+            },
           ],
           matchLogic: 'AND',
         },
@@ -587,7 +614,7 @@ describe('FilterMatcherService', () => {
       it('should match with = operator', async () => {
         const result = service.evaluateRule(
           { field: 'currentPrice', operator: '=', value: 1200 },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -595,7 +622,7 @@ describe('FilterMatcherService', () => {
       it('should match with != operator', async () => {
         const result = service.evaluateRule(
           { field: 'currentPrice', operator: '!=', value: 1000 },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -603,7 +630,7 @@ describe('FilterMatcherService', () => {
       it('should match with > operator', async () => {
         const result = service.evaluateRule(
           { field: 'currentPrice', operator: '>', value: 1000 },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -611,7 +638,7 @@ describe('FilterMatcherService', () => {
       it('should match with >= operator', async () => {
         const result = service.evaluateRule(
           { field: 'currentPrice', operator: '>=', value: 1200 },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -619,7 +646,7 @@ describe('FilterMatcherService', () => {
       it('should match with < operator', async () => {
         const result = service.evaluateRule(
           { field: 'currentPrice', operator: '<', value: 1500 },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -627,7 +654,7 @@ describe('FilterMatcherService', () => {
       it('should match with <= operator', async () => {
         const result = service.evaluateRule(
           { field: 'currentPrice', operator: '<=', value: 1200 },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -635,7 +662,7 @@ describe('FilterMatcherService', () => {
       it('should not match when numeric comparison fails', async () => {
         const result = service.evaluateRule(
           { field: 'currentPrice', operator: '>', value: 1500 },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(false);
       });
@@ -650,7 +677,7 @@ describe('FilterMatcherService', () => {
             value: 'rtx',
             caseSensitive: false,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -663,7 +690,7 @@ describe('FilterMatcherService', () => {
             value: 'RTX',
             caseSensitive: true,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -676,7 +703,7 @@ describe('FilterMatcherService', () => {
             value: 'rtx',
             caseSensitive: true,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(false);
       });
@@ -689,7 +716,7 @@ describe('FilterMatcherService', () => {
             value: 'RTX',
             caseSensitive: false,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -702,7 +729,7 @@ describe('FilterMatcherService', () => {
             value: 'GPU',
             caseSensitive: false,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -715,7 +742,7 @@ describe('FilterMatcherService', () => {
             value: '^RTX.*GPU$',
             caseSensitive: false,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -728,7 +755,7 @@ describe('FilterMatcherService', () => {
             value: '[invalid(',
             caseSensitive: false,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(false);
       });
@@ -741,7 +768,7 @@ describe('FilterMatcherService', () => {
             value: 'amazon',
             caseSensitive: false,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -754,7 +781,7 @@ describe('FilterMatcherService', () => {
             value: 'eBay',
             caseSensitive: false,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -769,7 +796,7 @@ describe('FilterMatcherService', () => {
             value: ['Amazon', 'eBay', 'Walmart'],
             caseSensitive: false,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -782,7 +809,7 @@ describe('FilterMatcherService', () => {
             value: ['eBay', 'Walmart'],
             caseSensitive: false,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(false);
       });
@@ -795,7 +822,7 @@ describe('FilterMatcherService', () => {
             value: ['eBay', 'Walmart'],
             caseSensitive: false,
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -807,7 +834,7 @@ describe('FilterMatcherService', () => {
             categoryPath: ['Electronics', 'PC Components', 'GPU'],
           } as Article,
           mockDealabsArticle.extension,
-          SiteSource.DEALABS,
+          SiteSource.DEALABS
         );
 
         const result = service.evaluateRule(
@@ -817,7 +844,7 @@ describe('FilterMatcherService', () => {
             value: ['GPU', 'CPU'],
             caseSensitive: false,
           },
-          articleWithArray,
+          articleWithArray
         );
         expect(result).toBe(true);
       });
@@ -829,7 +856,7 @@ describe('FilterMatcherService', () => {
             categoryPath: ['Electronics', 'PC Components', 'GPU'],
           } as Article,
           mockDealabsArticle.extension,
-          SiteSource.DEALABS,
+          SiteSource.DEALABS
         );
 
         const result = service.evaluateRule(
@@ -839,7 +866,7 @@ describe('FilterMatcherService', () => {
             value: ['Electronics', 'GPU'],
             caseSensitive: false,
           },
-          articleWithArray,
+          articleWithArray
         );
         expect(result).toBe(true);
       });
@@ -851,7 +878,7 @@ describe('FilterMatcherService', () => {
             categoryPath: ['Electronics', 'PC Components'],
           } as Article,
           mockDealabsArticle.extension,
-          SiteSource.DEALABS,
+          SiteSource.DEALABS
         );
 
         const result = service.evaluateRule(
@@ -861,7 +888,7 @@ describe('FilterMatcherService', () => {
             value: ['Electronics', 'GPU'],
             caseSensitive: false,
           },
-          articleWithArray,
+          articleWithArray
         );
         expect(result).toBe(false);
       });
@@ -871,7 +898,7 @@ describe('FilterMatcherService', () => {
       it('should match with IS_TRUE operator', async () => {
         const result = service.evaluateRule(
           { field: 'freeShipping', operator: 'IS_TRUE', value: true },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -879,7 +906,7 @@ describe('FilterMatcherService', () => {
       it('should match with IS_FALSE operator', async () => {
         const result = service.evaluateRule(
           { field: 'isCoupon', operator: 'IS_FALSE', value: false },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -891,12 +918,16 @@ describe('FilterMatcherService', () => {
             location: null,
           } as Article,
           mockDealabsArticle.extension,
-          SiteSource.DEALABS,
+          SiteSource.DEALABS
         );
 
         const result = service.evaluateRule(
-          { field: 'location', operator: 'IS_FALSE', value: false },
-          articleWithNull,
+          {
+            field: 'location' as FilterRule['field'],
+            operator: 'IS_FALSE',
+            value: false,
+          },
+          articleWithNull
         );
         expect(result).toBe(true);
       });
@@ -910,7 +941,7 @@ describe('FilterMatcherService', () => {
             operator: 'BEFORE',
             value: new Date('2025-01-16'),
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -922,7 +953,7 @@ describe('FilterMatcherService', () => {
             operator: 'AFTER',
             value: new Date('2025-01-14'),
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -934,7 +965,7 @@ describe('FilterMatcherService', () => {
             operator: 'BETWEEN',
             value: [new Date('2025-01-14'), new Date('2025-01-16')],
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -943,11 +974,11 @@ describe('FilterMatcherService', () => {
         // Article published ~1 hour ago, test for older than 0.5 hours
         const result = service.evaluateRule(
           {
-            field: 'scrapedAt',
+            field: 'scrapedAt' as FilterRule['field'],
             operator: 'OLDER_THAN',
             value: 0.01, // 0.01 hours = ~36 seconds
           },
-          mockDealabsArticle,
+          mockDealabsArticle
         );
         expect(result).toBe(true);
       });
@@ -960,16 +991,16 @@ describe('FilterMatcherService', () => {
             scrapedAt: new Date(Date.now() - 1000 * 60 * 60 * 0.5), // 0.5 hours ago
           } as Article,
           mockDealabsArticle.extension,
-          SiteSource.DEALABS,
+          SiteSource.DEALABS
         );
 
         const result = service.evaluateRule(
           {
-            field: 'scrapedAt',
+            field: 'scrapedAt' as FilterRule['field'],
             operator: 'NEWER_THAN',
             value: 1, // 1 hour
           },
-          recentArticle,
+          recentArticle
         );
         expect(result).toBe(true);
       });
@@ -988,7 +1019,7 @@ describe('FilterMatcherService', () => {
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(true);
     });
@@ -1004,7 +1035,7 @@ describe('FilterMatcherService', () => {
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(false);
     });
@@ -1020,7 +1051,7 @@ describe('FilterMatcherService', () => {
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(true);
     });
@@ -1036,7 +1067,7 @@ describe('FilterMatcherService', () => {
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(false);
     });
@@ -1051,7 +1082,7 @@ describe('FilterMatcherService', () => {
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(true); // NOT negates: false becomes true
     });
@@ -1073,7 +1104,7 @@ describe('FilterMatcherService', () => {
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(true);
     });
@@ -1091,7 +1122,7 @@ describe('FilterMatcherService', () => {
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(true);
     });
@@ -1104,7 +1135,7 @@ describe('FilterMatcherService', () => {
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(false);
     });
@@ -1116,18 +1147,22 @@ describe('FilterMatcherService', () => {
         rules: [
           { field: 'currentPrice', operator: '<=', value: 1500, weight: 2.0 }, // Passes
           { field: 'temperature', operator: '>=', value: 100, weight: 3.0 }, // Passes
-          { field: 'freeShipping', operator: 'IS_TRUE', value: true, weight: 1.0 }, // Passes
+          {
+            field: 'freeShipping',
+            operator: 'IS_TRUE',
+            value: true,
+            weight: 1.0,
+          }, // Passes
         ],
         minScore: 5.0,
-        scoreMode: 'weighted',
         matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
-      // Total score: 2.0 + 3.0 + 1.0 = 6.0, threshold is 5.0
+      // Weighted is normalized 0-100 (Phase 7 V6): all rules pass = 6.0/6.0 = 100% >= 5
       expect(result).toBe(true);
     });
 
@@ -1137,77 +1172,39 @@ describe('FilterMatcherService', () => {
           { field: 'currentPrice', operator: '<=', value: 1500, weight: 1.0 }, // Passes
           { field: 'temperature', operator: '>=', value: 200, weight: 3.0 }, // Fails
         ],
-        minScore: 3.0,
-        scoreMode: 'weighted',
-        matchLogic: 'AND',
+        minScore: 50, // 50%        matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
-      // Total score: 1.0 (only first rule passes), threshold is 3.0
+      // Weighted is normalized 0-100 (Phase 7 V6): earned 1.0 / total 4.0 = 25% < 50%
       expect(result).toBe(false);
     });
 
-    it('should calculate percentage score correctly', async () => {
+    it('should calculate normalized score with mixed pass/fail rules', async () => {
       const expression: RuleBasedFilterExpression = {
         rules: [
           { field: 'currentPrice', operator: '<=', value: 1500, weight: 1.0 }, // Passes
           { field: 'temperature', operator: '>=', value: 100, weight: 1.0 }, // Passes
-          { field: 'freeShipping', operator: 'IS_TRUE', value: true, weight: 1.0 }, // Passes
+          {
+            field: 'freeShipping',
+            operator: 'IS_TRUE',
+            value: true,
+            weight: 1.0,
+          }, // Passes
           { field: 'isCoupon', operator: 'IS_TRUE', value: true, weight: 1.0 }, // Fails
         ],
         minScore: 70, // 70%
-        scoreMode: 'percentage',
         matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       // Earned: 3.0, Total: 4.0 = 75% >= 70%
-      expect(result).toBe(true);
-    });
-
-    it('should not match when percentage score below threshold', async () => {
-      const expression: RuleBasedFilterExpression = {
-        rules: [
-          { field: 'currentPrice', operator: '<=', value: 1500, weight: 1.0 }, // Passes
-          { field: 'temperature', operator: '>=', value: 200, weight: 1.0 }, // Fails
-          { field: 'freeShipping', operator: 'IS_TRUE', value: true, weight: 1.0 }, // Passes
-          { field: 'isCoupon', operator: 'IS_TRUE', value: true, weight: 1.0 }, // Fails
-        ],
-        minScore: 60, // 60%
-        scoreMode: 'percentage',
-        matchLogic: 'AND',
-      };
-
-      const result = service.evaluateFilterExpression(
-        expression,
-        mockDealabsArticle,
-      );
-      // Earned: 2.0, Total: 4.0 = 50% < 60%
-      expect(result).toBe(false);
-    });
-
-    it('should calculate points score (same as weighted)', async () => {
-      const expression: RuleBasedFilterExpression = {
-        rules: [
-          { field: 'currentPrice', operator: '<=', value: 1500, weight: 10 }, // Passes
-          { field: 'temperature', operator: '>=', value: 100, weight: 5 }, // Passes
-        ],
-        minScore: 12,
-        scoreMode: 'points',
-        matchLogic: 'AND',
-      };
-
-      const result = service.evaluateFilterExpression(
-        expression,
-        mockDealabsArticle,
-      );
-      // Points: 10 + 5 = 15 >= 12
       expect(result).toBe(true);
     });
 
@@ -1218,15 +1215,14 @@ describe('FilterMatcherService', () => {
           { field: 'temperature', operator: '>=', value: 100 }, // No weight
         ],
         minScore: 1.5,
-        scoreMode: 'weighted',
         matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
-      // Default weight 1.0 each: 1.0 + 1.0 = 2.0 >= 1.5
+      // Default weight 1.0 each, both pass: 2.0/2.0 = 100% >= 1.5 (normalized, Phase 7 V6)
       expect(result).toBe(true);
     });
 
@@ -1235,18 +1231,22 @@ describe('FilterMatcherService', () => {
         rules: [
           { field: 'currentPrice', operator: '<=', value: 1500, weight: 2.0 }, // Passes
           { field: 'temperature', operator: '>=', value: 200, weight: 1.0 }, // Fails
-          { field: 'freeShipping', operator: 'IS_TRUE', value: true, weight: 2.0 }, // Passes
+          {
+            field: 'freeShipping',
+            operator: 'IS_TRUE',
+            value: true,
+            weight: 2.0,
+          }, // Passes
         ],
         minScore: 3.0,
-        scoreMode: 'weighted',
         matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
-      // Earned: 2.0 + 2.0 = 4.0 >= 3.0
+      // Normalized (Phase 7 V6): earned 4.0 / total 5.0 = 80% >= 3
       expect(result).toBe(true);
     });
 
@@ -1257,13 +1257,12 @@ describe('FilterMatcherService', () => {
           { field: 'temperature', operator: '>=', value: 100, weight: 1.0 },
         ],
         minScore: 0,
-        scoreMode: 'weighted',
         matchLogic: 'AND',
       };
 
       const result = service.evaluateFilterExpression(
         expression,
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       // Should use boolean evaluation (AND logic) instead of scoring
       expect(result).toBe(true);
@@ -1278,7 +1277,7 @@ describe('FilterMatcherService', () => {
           description: null,
         } as Article,
         mockDealabsArticle.extension,
-        SiteSource.DEALABS,
+        SiteSource.DEALABS
       );
 
       const result = service.evaluateRule(
@@ -1288,7 +1287,7 @@ describe('FilterMatcherService', () => {
           value: 'test',
           caseSensitive: false,
         },
-        articleWithNull,
+        articleWithNull
       );
       expect(result).toBe(false);
     });
@@ -1300,7 +1299,7 @@ describe('FilterMatcherService', () => {
           operator: '=',
           value: 'test',
         },
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(false);
     });
@@ -1313,7 +1312,7 @@ describe('FilterMatcherService', () => {
           value: 'GAMING',
           // caseSensitive not specified, defaults to false
         },
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(true);
     });
@@ -1345,7 +1344,7 @@ describe('FilterMatcherService', () => {
           operator: '=',
           value: 'test',
         },
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(false);
     });
@@ -1358,7 +1357,7 @@ describe('FilterMatcherService', () => {
           operator: '>=',
           value: 0,
         },
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(true);
     });
@@ -1371,7 +1370,7 @@ describe('FilterMatcherService', () => {
           operator: '>=',
           value: 20,
         },
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(true); // (1600-1200)/1600 * 100 = 25%
     });
@@ -1383,7 +1382,7 @@ describe('FilterMatcherService', () => {
           operator: '>=',
           value: 100,
         },
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(true);
     });
@@ -1395,7 +1394,7 @@ describe('FilterMatcherService', () => {
           operator: '<=',
           value: 1500,
         },
-        mockDealabsArticle,
+        mockDealabsArticle
       );
       expect(result).toBe(true);
     });
@@ -1408,7 +1407,7 @@ describe('FilterMatcherService', () => {
           operator: '>=',
           value: 100,
         },
-        mockVintedArticle,
+        mockVintedArticle
       );
       expect(result).toBe(false); // null fails numeric comparison
     });

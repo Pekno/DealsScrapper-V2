@@ -8,7 +8,12 @@ import * as winston from 'winston';
 /**
  * Supported service names for logging configuration
  */
-export type ServiceName = 'api' | 'scraper' | 'notifier' | 'scheduler';
+export type ServiceName =
+  | 'api'
+  | 'scraper'
+  | 'notifier'
+  | 'scheduler'
+  | 'extractor';
 
 /**
  * Log file naming configuration

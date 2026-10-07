@@ -11,10 +11,11 @@ import {
   getFieldSites,
   getSiteName,
 } from './site-fields.constants.js';
-import type {
-  FilterRule,
-  FilterRuleGroup,
-} from '@dealscrapper/shared-types';
+import {
+  getFieldTypeCategory,
+  isOperatorAllowedForCategory,
+} from './field-operator.constants.js';
+import type { FilterRule, FilterRuleGroup } from '@dealscrapper/shared-types';
 
 /**
  * Fields that represent prices and must have non-negative values
@@ -76,7 +77,9 @@ export class ValidateSiteSpecificFieldsConstraint
   validate(value: unknown, args: ValidationArguments): boolean {
     const object = args.object as Record<string, unknown>;
 
-    const filterExpression = object.filterExpression as { rules?: (FilterRule | FilterRuleGroup)[] } | undefined;
+    const filterExpression = object.filterExpression as
+      | { rules?: (FilterRule | FilterRuleGroup)[] }
+      | undefined;
 
     // If no filter expression, validation passes
     if (!filterExpression || !filterExpression.rules) {
@@ -128,12 +131,19 @@ export class ValidateSiteSpecificFieldsConstraint
         errors.push(...nestedErrors);
       } else if ('field' in rule) {
         // This is a FilterRule with a field
-        const fieldRule = rule as FilterRule;
+        const fieldRule = rule;
         const field = fieldRule.field;
 
         // Business rule validation: Check for invalid values
         const businessErrors = this.validateBusinessRules(fieldRule);
         errors.push(...businessErrors);
+
+        // Operator/type validation: reject (field, operator) pairs the engine
+        // can never meaningfully evaluate (e.g. `temperature REGEX`,
+        // `freeShipping CONTAINS`, `title IS_TRUE`). Fails OPEN for fields not
+        // in the runtime type map (site-specific fields handled below).
+        const operatorErrors = this.validateFieldOperator(fieldRule);
+        errors.push(...operatorErrors);
 
         // Case 1: Field is universal - skip site-specific validation
         if (isUniversalField(field)) {
@@ -146,9 +156,7 @@ export class ValidateSiteSpecificFieldsConstraint
         if (fieldSites.length === 0) {
           // Field is not recognized as universal or site-specific
           // This might be a typo or unsupported field
-          errors.push(
-            `Unknown field '${field}'. Please check the field name.`
-          );
+          errors.push(`Unknown field '${field}'. Please check the field name.`);
           continue;
         }
 
@@ -191,14 +199,7 @@ export class ValidateSiteSpecificFieldsConstraint
     const value = rule.value;
 
     // Skip validation for operators that don't use numeric values
-    const nonNumericOperators = [
-      'IS_TRUE',
-      'IS_FALSE',
-      'IS_NULL',
-      'IS_NOT_NULL',
-      'EXISTS',
-      'NOT_EXISTS',
-    ];
+    const nonNumericOperators = ['IS_TRUE', 'IS_FALSE'];
     if (nonNumericOperators.includes(rule.operator)) {
       return errors;
     }
@@ -226,9 +227,7 @@ export class ValidateSiteSpecificFieldsConstraint
     // Validate percentage fields: must be 0-100
     if (PERCENTAGE_FIELDS.includes(field)) {
       if (typeof value === 'number' && (value < 0 || value > 100)) {
-        errors.push(
-          `Field '${field}' must be between 0 and 100 (percentage).`
-        );
+        errors.push(`Field '${field}' must be between 0 and 100 (percentage).`);
       }
     }
 
@@ -242,6 +241,39 @@ export class ValidateSiteSpecificFieldsConstraint
     }
 
     return errors;
+  }
+
+  /**
+   * Validates that a rule's operator is compatible with its field's type.
+   *
+   * Looks up the field's runtime type category and rejects the rule if the
+   * operator is not in the engine's allowed set for that category. This makes
+   * the otherwise compile-time-only `FieldTypeMap` load-bearing at the DTO
+   * boundary, preventing syntactically-valid filters that can never match
+   * (e.g. `temperature REGEX ...`, `freeShipping CONTAINS "x"`).
+   *
+   * Fails OPEN for fields absent from the runtime type map (site-specific
+   * fields such as `favoriteCount`/`size`/`city`), which are handled by the
+   * site-fields validation that follows.
+   *
+   * @param rule - Filter rule to validate
+   * @returns Array of validation error messages (empty if valid)
+   */
+  private validateFieldOperator(rule: FilterRule): string[] {
+    const category = getFieldTypeCategory(rule.field);
+
+    // Fail open: unknown field -> let site-fields validation decide.
+    if (category === undefined) {
+      return [];
+    }
+
+    if (!isOperatorAllowedForCategory(rule.operator, category)) {
+      return [
+        `Field '${rule.field}' (${category}) does not support operator '${rule.operator}'.`,
+      ];
+    }
+
+    return [];
   }
 }
 

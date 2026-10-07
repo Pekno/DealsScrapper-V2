@@ -4,6 +4,7 @@ import { UsersService } from '../../../src/users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { SharedConfigService } from '@dealscrapper/shared-config';
 import { PrismaService } from '@dealscrapper/database';
+import type { User } from '@dealscrapper/database';
 import { EmailVerificationService } from '../../../src/auth/services/email-verification.service';
 import {
   UnauthorizedException,
@@ -47,6 +48,7 @@ describe('AuthService - User Security & Account Management', () => {
   const mockUsersService = {
     findByEmail: jest.fn(),
     create: jest.fn(),
+    update: jest.fn(),
   };
 
   const mockJwtService = {
@@ -134,15 +136,15 @@ describe('AuthService - User Security & Account Management', () => {
       const result = await service.validateUser('test@example.com', 'password');
 
       // User Security: Successful authentication without exposing password
-      expect(result.id).toBe('user-1');
-      expect(result.email).toBe('test@example.com');
-      expect(result.password).toBeUndefined(); // Password excluded for security
+      expect(result!.id).toBe('user-1');
+      expect(result!.email).toBe('test@example.com');
+      expect((result as Record<string, unknown>).password).toBeUndefined(); // Password excluded for security
       // User Value: Access granted with personalized preferences
-      expect(result.firstName).toBe('John');
-      expect(result.lastName).toBe('Doe');
-      expect(result.emailNotifications).toBe(true);
-      expect(result.weeklyDigest).toBe(true);
-      expect(result.loginAttempts).toBe(0); // Clean security state
+      expect(result!.firstName).toBe('John');
+      expect(result!.lastName).toBe('Doe');
+      expect(result!.emailNotifications).toBe(true);
+      expect(result!.weeklyDigest).toBe(true);
+      expect(result!.loginAttempts).toBe(0); // Clean security state
     });
 
     it('should protect against authentication with non-existent accounts', async () => {
@@ -228,7 +230,7 @@ describe('AuthService - User Security & Account Management', () => {
       mockJwtService.sign.mockReturnValue('jwt-access-token');
 
       const result = await service.login(
-        userWithoutPassword,
+        userWithoutPassword as unknown as User,
         '127.0.0.1',
         'test-agent'
       );
@@ -236,16 +238,18 @@ describe('AuthService - User Security & Account Management', () => {
       // User Security: Secure token generation for authenticated access
       expect(result.success).toBe(true);
       expect(result.message).toBe('Login successful');
-      expect(result.data.access_token).toBe('jwt-access-token');
-      expect(result.data.refresh_token).toBeDefined();
-      expect(result.data.expires_in).toBe('15m');
+      expect(result.data!.access_token).toBe('jwt-access-token');
+      expect(result.data!.refresh_token).toBeDefined();
+      expect(result.data!.expires_in).toBe('15m');
       // User Value: Complete authentication package for immediate platform access
-      expect(result.data.user.id).toBe('user-1');
-      expect(result.data.user.email).toBe('test@example.com');
-      expect(result.data.user.firstName).toBe('John');
-      expect(result.data.user.lastName).toBe('Doe');
-      expect(result.data.user.password).toBeUndefined(); // Security: No password exposure
-      expect(result.data.user.role).toBe('USER'); // Role included in response
+      expect(result.data!.user.id).toBe('user-1');
+      expect(result.data!.user.email).toBe('test@example.com');
+      expect(result.data!.user.firstName).toBe('John');
+      expect(result.data!.user.lastName).toBe('Doe');
+      expect(
+        (result.data!.user as Record<string, unknown>).password
+      ).toBeUndefined(); // Security: No password exposure
+      expect(result.data!.user.role).toBe('USER'); // Role included in response
     });
   });
 
@@ -258,7 +262,11 @@ describe('AuthService - User Security & Account Management', () => {
     });
 
     it('should enable new users to create secure accounts with immediate access', async () => {
-      const newUser = { ...mockUser, emailVerified: false, emailVerifiedAt: null };
+      const newUser = {
+        ...mockUser,
+        emailVerified: false,
+        emailVerifiedAt: null,
+      };
       mockUsersService.create.mockResolvedValue(newUser);
 
       const result = await service.register(
@@ -344,7 +352,9 @@ describe('AuthService - User Security & Account Management', () => {
             password: expect.any(String),
           })
         );
-        expect(mockEmailVerificationService.sendVerificationEmail).toHaveBeenCalledWith(
+        expect(
+          mockEmailVerificationService.sendVerificationEmail
+        ).toHaveBeenCalledWith(
           existingUnverifiedUser.id,
           existingUnverifiedUser.email
         );
@@ -367,7 +377,9 @@ describe('AuthService - User Security & Account Management', () => {
         ).rejects.toThrow(ConflictException);
 
         expect(mockUsersService.update).not.toHaveBeenCalled();
-        expect(mockEmailVerificationService.sendVerificationEmail).not.toHaveBeenCalled();
+        expect(
+          mockEmailVerificationService.sendVerificationEmail
+        ).not.toHaveBeenCalled();
       });
 
       it('should update password on re-registration', async () => {
@@ -387,9 +399,12 @@ describe('AuthService - User Security & Account Management', () => {
         await service.register('test@example.com', 'NewPassword123');
 
         expect(mockUsersService.update).toHaveBeenCalled();
-        const updateCall = (mockUsersService.update as jest.Mock).mock.calls[0][1];
+        const updateCall = mockUsersService.update.mock.calls[0][1];
         expect(updateCall.password).toBe('hashedPassword');
-        expect(mockBcryptjs.hash).toHaveBeenCalledWith('NewPassword123', expect.any(Number));
+        expect(mockBcryptjs.hash).toHaveBeenCalledWith(
+          'NewPassword123',
+          expect.any(Number)
+        );
       });
 
       it('should keep existing names if not provided during re-registration', async () => {

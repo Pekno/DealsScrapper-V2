@@ -112,7 +112,7 @@ export class FiltersService {
     private readonly prisma: PrismaService,
     private readonly httpService: HttpService,
     private readonly sharedConfig: SharedConfigService,
-    private readonly filterMatcherService: FilterMatcherService,
+    private readonly filterMatcherService: FilterMatcherService
   ) {}
 
   /**
@@ -193,7 +193,10 @@ export class FiltersService {
 
       // Match existing articles against the new filter (async, don't block response)
       // This provides immediate results without triggering new scrapes
-      this.matchExistingArticlesForFilter(filter.id, createFilterDto.categoryIds)
+      this.matchExistingArticlesForFilter(
+        filter.id,
+        createFilterDto.categoryIds
+      )
         .then((matchCount) => {
           if (matchCount > 0) {
             this.logger.log(
@@ -346,10 +349,14 @@ export class FiltersService {
     }
 
     // Determine if matching criteria changed (requires match re-evaluation)
-    const filterExpressionChanged = updateFilterDto.filterExpression !== undefined;
+    const filterExpressionChanged =
+      updateFilterDto.filterExpression !== undefined;
     const categoriesChanged = updateFilterDto.categoryIds !== undefined;
     // Note: enabledSites removed - sites are now derived from categories
-    const matchingCriteriaChanged = filterExpressionChanged || categoriesChanged;
+    const matchingCriteriaChanged =
+      filterExpressionChanged || categoriesChanged;
+
+    const oldCategoryIds = existingFilter.categories.map((fc) => fc.categoryId);
 
     try {
       const updatedFilter = await this.prisma.filter.update({
@@ -394,10 +401,22 @@ export class FiltersService {
 
       // Notify scheduler service about filter update
       // Get category IDs from the updated filter
-      const categoryIds = updatedFilter.categories.map(
-        (fc) => fc.category.id
-      );
+      const categoryIds = updatedFilter.categories.map((fc) => fc.category.id);
       await this.notifySchedulerService(filterId, 'updated', categoryIds);
+
+      // Notify scheduler to clean up jobs for categories that were removed
+      if (updateFilterDto.categoryIds !== undefined) {
+        const removedCategoryIds = oldCategoryIds.filter(
+          (id) => !categoryIds.includes(id)
+        );
+        if (removedCategoryIds.length > 0) {
+          await this.notifySchedulerService(
+            filterId,
+            'deleted',
+            removedCategoryIds
+          );
+        }
+      }
 
       // If matching criteria changed, re-evaluate all matches
       if (matchingCriteriaChanged) {
@@ -742,10 +761,10 @@ export class FiltersService {
 
   /**
    * Find all filters that match a given article.
-   * 
+   *
    * Uses FilterMatcherService to evaluate filter expressions against
    * the article's data.
-   * 
+   *
    * @param articleId - Article ID to match filters against
    * @returns Array of matching Filter objects
    * @throws {NotFoundException} If article not found
@@ -757,40 +776,49 @@ export class FiltersService {
     const article = await ArticleWrapper.load(articleId, this.prisma);
 
     // Use FilterMatcherService to find matches
-    const matchingFilters = await this.filterMatcherService.matchArticle(article);
+    const matchingFilters =
+      await this.filterMatcherService.matchArticle(article);
 
     this.logger.log(
-      `Article ${articleId} matched ${matchingFilters.length} filters`,
+      `Article ${articleId} matched ${matchingFilters.length} filters`
     );
 
     return matchingFilters;
   }
 
-  private mapCategoriesToDto(filterCategories: FilterCategory[]): CategoryDto[] {
-    return filterCategories?.map((fc) => ({
-      id: fc.category.id,
-      slug: fc.category.slug,
-      name: fc.category.name,
-      siteId: fc.category.siteId,
-      sourceUrl: fc.category.sourceUrl,
-      parentId: fc.category.parentId ?? undefined,
-      level: fc.category.level,
-      description: fc.category.description ?? undefined,
-      dealCount: fc.category.dealCount,
-      avgTemperature: fc.category.avgTemperature,
-      popularBrands: fc.category.popularBrands,
-      isActive: fc.category.isActive,
-      userCount: fc.category.userCount,
-      createdAt: fc.category.createdAt,
-      updatedAt: fc.category.updatedAt,
-    })) || [];
+  private mapCategoriesToDto(
+    filterCategories: FilterCategory[]
+  ): CategoryDto[] {
+    return (
+      filterCategories?.map((fc) => ({
+        id: fc.category.id,
+        slug: fc.category.slug,
+        name: fc.category.name,
+        siteId: fc.category.siteId,
+        sourceUrl: fc.category.sourceUrl,
+        parentId: fc.category.parentId ?? undefined,
+        level: fc.category.level,
+        description: fc.category.description ?? undefined,
+        dealCount: fc.category.dealCount,
+        avgTemperature: fc.category.avgTemperature,
+        popularBrands: fc.category.popularBrands,
+        isActive: fc.category.isActive,
+        userCount: fc.category.userCount,
+        createdAt: fc.category.createdAt,
+        updatedAt: fc.category.updatedAt,
+      })) || []
+    );
   }
 
-  private async mapToResponseDto(filter: FilterWithCategories): Promise<FilterResponseDto> {
+  private async mapToResponseDto(
+    filter: FilterWithCategories
+  ): Promise<FilterResponseDto> {
     const stats = await this.getFilterStats(filter.userId, filter.id);
 
     // Derive enabled sites from categories
-    const enabledSites = [...new Set(filter.categories.map((fc) => fc.category.siteId))];
+    const enabledSites = [
+      ...new Set(filter.categories.map((fc) => fc.category.siteId)),
+    ];
 
     return {
       id: filter.id,
@@ -817,9 +845,13 @@ export class FiltersService {
   /**
    * Map filter to lightweight response DTO for list endpoints (without stats)
    */
-  private mapToListResponseDto(filter: FilterWithCategories): FilterResponseDto {
+  private mapToListResponseDto(
+    filter: FilterWithCategories
+  ): FilterResponseDto {
     // Derive enabled sites from categories
-    const enabledSites = [...new Set(filter.categories.map((fc) => fc.category.siteId))];
+    const enabledSites = [
+      ...new Set(filter.categories.map((fc) => fc.category.siteId)),
+    ];
 
     return {
       id: filter.id,
@@ -949,7 +981,11 @@ export class FiltersService {
     }
 
     // Evaluate filter against each article
-    const matchesToCreate: { filterId: string; articleId: string; score: number }[] = [];
+    const matchesToCreate: {
+      filterId: string;
+      articleId: string;
+      score: number;
+    }[] = [];
 
     for (const wrapper of wrappers) {
       try {
@@ -1005,7 +1041,7 @@ export class FiltersService {
     expression: RuleBasedFilterExpression,
     article: ArticleWrapper
   ): number {
-    const { rules, minScore, scoreMode = 'weighted' } = expression;
+    const { rules, minScore } = expression;
 
     // If no rules, no score
     if (!rules || rules.length === 0) {
@@ -1021,8 +1057,7 @@ export class FiltersService {
         const weight = rule.weight ?? 1.0;
         totalWeight += weight;
 
-        // TODO: Expose evaluateRuleOrGroup as a public method on FilterMatcherService instead of using bracket notation to bypass access modifiers
-        const matches = this.filterMatcherService['evaluateRuleOrGroup'](
+        const matches = this.filterMatcherService.evaluateRuleOrGroup(
           rule,
           article
         );
@@ -1031,22 +1066,13 @@ export class FiltersService {
         }
       }
 
-      switch (scoreMode) {
-        case 'percentage':
-          return totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
-        case 'points':
-        case 'weighted':
-        default:
-          return earnedWeight;
-      }
+      return totalWeight > 0 ? (earnedWeight / totalWeight) * 100 : 0;
     }
 
     // For boolean matching, use count of matching rules as score
     let matchingRules = 0;
     for (const rule of rules) {
-      if (
-        this.filterMatcherService['evaluateRuleOrGroup'](rule, article)
-      ) {
+      if (this.filterMatcherService.evaluateRuleOrGroup(rule, article)) {
         matchingRules++;
       }
     }
@@ -1056,7 +1082,9 @@ export class FiltersService {
   /**
    * Validate filter expression for basic structural issues
    */
-  private validateFilterExpression(expression: RuleBasedFilterExpression): void {
+  private validateFilterExpression(
+    expression: RuleBasedFilterExpression
+  ): void {
     if (!expression || typeof expression !== 'object') {
       throw new BadRequestException('Filter expression must be an object');
     }
@@ -1093,7 +1121,7 @@ export class FiltersService {
     // Type guard: check if this is a rule group
     if ('logic' in rule && rule.logic) {
       // This is a rule group
-      const ruleGroup = rule as FilterRuleGroup;
+      const ruleGroup = rule;
       if (!ruleGroup.rules || !Array.isArray(ruleGroup.rules)) {
         throw new BadRequestException(
           `Invalid rule group at ${path}: must have a rules array`
@@ -1140,7 +1168,10 @@ export class FiltersService {
       }
 
       // Check for empty string values
-      if (typeof filterRule.value === 'string' && filterRule.value.trim() === '') {
+      if (
+        typeof filterRule.value === 'string' &&
+        filterRule.value.trim() === ''
+      ) {
         throw new BadRequestException(
           `Invalid rule at ${path}: value cannot be empty`
         );
@@ -1151,7 +1182,10 @@ export class FiltersService {
   /**
    * Get scraping job status for all categories associated with a filter
    */
-  async getScrapingStatus(userId: string, filterId: string): Promise<ScrapingStatusResponse> {
+  async getScrapingStatus(
+    userId: string,
+    filterId: string
+  ): Promise<ScrapingStatusResponse> {
     this.logger.debug(`Getting scraping status for filter ${filterId}`);
 
     // Get filter with categories (verifies ownership and existence)
@@ -1233,5 +1267,4 @@ export class FiltersService {
       // REMOVED: overallStatus - let frontend handle presentation
     };
   }
-
 }

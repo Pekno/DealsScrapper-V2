@@ -2,12 +2,26 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { NotificationsService } from '../../../src/notifications/notifications.service.js';
 import { PrismaService } from '@dealscrapper/database';
+import { UnifiedNotificationPayload } from '@dealscrapper/shared-types';
+import { SiteSource } from '@dealscrapper/shared-types';
 import { NotificationRepository } from '../../../src/repositories/notification.repository.js';
 import { DeliveryTrackingService } from '../../../src/services/delivery-tracking.service.js';
 
+/**
+ * Structural mock of the Prisma `notification` delegate. The generated Prisma
+ * delegate methods are complex generic function types that `jest.Mocked` cannot
+ * deeply traverse, so the nested methods are typed explicitly as `jest.Mock`.
+ */
+type MockPrismaService = {
+  notification: Record<
+    'findUnique' | 'update' | 'updateMany' | 'delete',
+    jest.Mock
+  >;
+};
+
 describe('NotificationsService', () => {
   let service: NotificationsService;
-  let prismaService: jest.Mocked<PrismaService>;
+  let prismaService: MockPrismaService;
   let notificationRepository: jest.Mocked<NotificationRepository>;
   let deliveryTrackingService: jest.Mocked<DeliveryTrackingService>;
 
@@ -52,22 +66,26 @@ describe('NotificationsService', () => {
     }).compile();
 
     service = module.get<NotificationsService>(NotificationsService);
-    prismaService = module.get(PrismaService);
+    prismaService = module.get(PrismaService) as unknown as MockPrismaService;
     notificationRepository = module.get(NotificationRepository);
     deliveryTrackingService = module.get(DeliveryTrackingService);
   });
 
   describe('getNotifications()', () => {
     it('should return notifications for a user', async () => {
+      const mockPayload: UnifiedNotificationPayload = {
+        id: 'notif_123',
+        siteId: SiteSource.DEALABS,
+        type: 'DEAL_MATCH',
+        title: 'New deal',
+        message: 'A deal matched your filter',
+        data: { dealId: 'deal-123' },
+        timestamp: new Date().toISOString(),
+        read: false,
+      };
+
       const mockResponse = {
-        data: [
-          {
-            type: 'deal-match' as const,
-            data: { dealId: 'deal-123' },
-            priority: 'normal' as const,
-            timestamp: new Date(),
-          },
-        ],
+        data: [mockPayload],
         totalCount: 1,
         unreadCount: 1,
         currentPage: 1,

@@ -274,7 +274,7 @@ function MetricCard({
   icon,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   icon: React.ReactNode;
 }) {
   return (
@@ -287,7 +287,7 @@ function MetricCard({
       </div>
       <div>
         <p className="text-2xl font-bold text-gray-900" data-cy="metric-value">
-          {value.toLocaleString()}
+          {typeof value === 'number' ? value.toLocaleString() : value}
         </p>
         <p className="text-sm text-gray-500">{label}</p>
       </div>
@@ -603,6 +603,14 @@ function ScraperWorkerTile({ worker }: { worker: ScraperWorker }) {
         ).toFixed(1)
       : null;
 
+  const llmSuccessRate =
+    worker.llm && worker.llm.totalExtractions > 0
+      ? (
+          (worker.llm.successfulExtractions / worker.llm.totalExtractions) *
+          100
+        ).toFixed(1)
+      : null;
+
   return (
     <div
       className="bg-gray-50 rounded-lg border border-gray-200 p-4"
@@ -663,6 +671,29 @@ function ScraperWorkerTile({ worker }: { worker: ScraperWorker }) {
             <span className="text-gray-500">Success</span>
             <span className="text-gray-700 font-medium">{successRate}%</span>
           </div>
+        )}
+
+        {worker.llm && worker.llm.totalExtractions > 0 && (
+          <>
+            <div className="flex justify-between pt-1 border-t border-gray-100">
+              <span className="text-gray-500">LLM Extractions</span>
+              <span className="text-gray-700 font-medium">
+                {worker.llm.successfulExtractions}/{worker.llm.totalExtractions}
+              </span>
+            </div>
+            {llmSuccessRate !== null && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">LLM Success</span>
+                <span className="text-gray-700 font-medium">{llmSuccessRate}%</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-gray-500">Avg LLM Time</span>
+              <span className="text-gray-700 font-medium">
+                {worker.llm.avgExtractionTimeMs.toLocaleString()}ms
+              </span>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -924,7 +955,7 @@ function DashboardTab({ isAdmin }: { isAdmin: boolean }) {
               onRetry={metricsData.refresh}
             />
           ) : metricsData.data ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
               <MetricCard
                 label="Total Users"
                 value={metricsData.data.totalUsers}
@@ -1001,6 +1032,30 @@ function DashboardTab({ isAdmin }: { isAdmin: boolean }) {
                       strokeLinejoin="round"
                       strokeWidth={2}
                       d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
+                  </svg>
+                }
+              />
+              <MetricCard
+                label="Avg LLM Time (7d)"
+                value={
+                  metricsData.data.avgOllamaExtractionTimeMs > 0
+                    ? `${metricsData.data.avgOllamaExtractionTimeMs.toLocaleString()}ms`
+                    : '—'
+                }
+                icon={
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
                 }

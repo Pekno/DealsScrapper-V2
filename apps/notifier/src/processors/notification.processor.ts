@@ -12,7 +12,6 @@ import {
 } from '../services/notification-preferences.service.js';
 import { DeliveryTrackingService } from '../services/delivery-tracking.service.js';
 import { EmailService } from '../channels/email.service.js';
-import { TemplateService } from '../templates/template.service.js';
 import { ChannelHealthService } from '../services/channel-health.service.js';
 import { notifierLogConfig } from '../config/logging.config.js';
 import { deserializeNotificationPayloadOrNull } from '../utils/json-deserializer.utils.js';
@@ -27,7 +26,6 @@ import { withErrorHandling } from '../utils/error-handling.utils.js';
  *
  * Recommended test coverage:
  * - processNotification: job processing with valid/invalid payloads
- * - retryNotification: retry logic with different delivery states
  * - sendViaChannels: channel selection and fallback behavior
  * - shouldSendEmail: email eligibility logic
  * - Queue event handlers (OnQueueActive, OnQueueCompleted, OnQueueFailed)
@@ -40,6 +38,12 @@ export interface DealMatchNotificationData {
   matchId: string;
   userId: string;
   filterId: string;
+  /**
+   * Event-granular idempotency key set by the scraper producer.
+   * `deal-match-${matchId}` for an initial match, `deal-match-${matchId}-drop-${price}`
+   * for a price-drop re-alert. Falls back to `deal-match-${matchId}` when omitted.
+   */
+  dedupKey?: string;
   dealData: {
     title: string;
     price: number;
@@ -112,7 +116,6 @@ export class NotificationProcessor {
     private readonly notificationPreferencesService: NotificationPreferencesService,
     private readonly deliveryTracking: DeliveryTrackingService,
     private readonly emailService: EmailService,
-    private readonly templateService: TemplateService,
     private readonly channelHealthService: ChannelHealthService,
     private readonly prisma: PrismaService
   ) {
@@ -126,6 +129,9 @@ export class NotificationProcessor {
   @Process('deal-match-found')
   async handleDealMatch(job: Job<DealMatchNotificationData>) {
     const { userId, dealData, priority, matchId, filterId } = job.data;
+    // Event-granular idempotency key: use the producer-supplied value, falling
+    // back to the match-granular key so initial matches still dedup deterministically.
+    const dedupKey = job.data.dedupKey ?? `deal-match-${matchId}`;
 
     return withErrorHandling(
       this.logger,
@@ -234,6 +240,7 @@ export class NotificationProcessor {
           title: `🎯 New Deal: ${dealData.title}`,
           message: `${priceInfo} at ${dealData.merchant}`,
           matchId,
+          dedupKey,
           filterId,
           data: {
             dealData: {
@@ -259,12 +266,24 @@ export class NotificationProcessor {
         };
 
         // 6. Create delivery tracking record with unified payload
-        const deliveryId = await this.deliveryTracking.createDelivery({
-          userId,
-          type: 'deal-match',
-          priority: priority as 'high' | 'normal' | 'low',
-          notificationPayload: unifiedNotificationPayload,
-        });
+        const { deliveryId, deduplicated } =
+          await this.deliveryTracking.createDelivery({
+            userId,
+            type: 'deal-match',
+            priority: priority as 'high' | 'normal' | 'low',
+            notificationPayload: unifiedNotificationPayload,
+          });
+
+        // Idempotent short-circuit: a deduplicated event already produced a
+        // delivery (and its channel sends). Re-sending here would deliver a
+        // duplicate email for a retried/re-detected job, so stop after the
+        // dedup is recorded.
+        if (deduplicated) {
+          this.logger.debug(
+            `⏭️ Deal match for user ${userId} deduplicated to existing delivery ${deliveryId}; skipping re-send`
+          );
+          return;
+        }
 
         // 7. Send notifications via selected channels with delivery tracking
         const deliveryResults = await this.sendNotificationsWithTracking(
@@ -299,373 +318,6 @@ export class NotificationProcessor {
         }
       }
       // No fallback - throw error for BullMQ retry mechanism
-    );
-  }
-
-  @Process('system-notification')
-  async handleSystemNotification(job: Job<any>) {
-    const { userId, subject, message, priority, type } = job.data;
-
-    return withErrorHandling(
-      this.logger,
-      `processing system notification for user ${userId}`,
-      async () => {
-        this.logger.log(
-          `📢 Processing system notification for user ${userId}: ${subject}`
-        );
-
-        // Build unified notification payload for system notification
-        // System notifications use DEALABS as default siteId (not site-specific)
-        const unifiedNotificationPayload: UnifiedNotificationPayload = {
-          id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-          siteId: SiteSource.DEALABS, // Default for system notifications
-          type: 'SYSTEM',
-          title: subject || 'System Notification',
-          message: message || 'You have a new system notification',
-          data: {
-            systemType: type,
-          },
-          timestamp: new Date().toISOString(),
-          read: false,
-        };
-
-        // Create delivery tracking for system notifications
-        const deliveryId = await this.deliveryTracking.createDelivery({
-          userId,
-          type: 'system',
-          priority: (priority as 'high' | 'normal' | 'low') || 'normal',
-          notificationPayload: unifiedNotificationPayload,
-        });
-
-        // Get user status to determine best delivery strategy
-        const userStatus = await this.userStatusService.getUserStatus(userId);
-        const isUserOnline = userStatus?.isOnline ?? false;
-
-        // For system notifications, use different channel priority based on urgency
-        const channels: Array<'websocket' | 'email'> = [];
-
-        if (priority === 'high') {
-          // High priority: try both channels regardless of user status
-          channels.push(isUserOnline ? 'websocket' : 'email');
-          channels.push(isUserOnline ? 'email' : 'websocket');
-        } else {
-          // Normal/Low priority: prefer WebSocket if online, email if offline
-          channels.push(isUserOnline ? 'websocket' : 'email');
-        }
-
-        this.logger.debug(
-          `📋 System notification channels for ${userId}: ${channels.join(' → ')} (priority: ${priority})`
-        );
-
-        const results: Record<string, boolean> = {};
-        let notificationSent = false;
-
-        for (const channel of channels) {
-          try {
-            const success = await this.sendSystemNotificationViaChannel(
-              channel,
-              userId,
-              { subject, message, type, priority }
-            );
-
-            results[channel] = success;
-
-            // Record delivery attempt
-            await this.deliveryTracking.recordAttempt(
-              deliveryId,
-              channel,
-              success ? 'delivered' : 'failed',
-              success ? undefined : 'System notification delivery failed'
-            );
-
-            if (success) {
-              notificationSent = true;
-              this.logger.log(
-                `✅ System notification sent via ${channel} to ${userId} [${deliveryId}]`
-              );
-
-              // For high priority notifications, continue to try other channels
-              if (priority !== 'high') {
-                break; // Stop after first successful delivery for normal priority
-              }
-            } else {
-              this.logger.warn(
-                `❌ System notification failed via ${channel} for ${userId}`
-              );
-            }
-          } catch (error) {
-            this.logger.error(
-              `❌ ${channel} system notification failed for ${userId}:`,
-              error
-            );
-            results[channel] = false;
-
-            // Record failed attempt
-            await this.deliveryTracking.recordAttempt(
-              deliveryId,
-              channel,
-              'failed',
-              extractErrorMessage(error)
-            );
-          }
-        }
-
-        if (!notificationSent) {
-          this.logger.warn(
-            `❌ System notification failed via all channels for ${userId} [${deliveryId}]`
-          );
-
-          // For high priority notifications, schedule retry
-          if (priority === 'high') {
-            await this.deliveryTracking.scheduleRetry(deliveryId, 5); // Retry in 5 minutes
-            this.logger.log(
-              `🔄 Scheduled retry for high priority system notification [${deliveryId}]`
-            );
-          }
-        }
-      }
-    );
-  }
-
-  private async sendSystemNotificationViaChannel(
-    channel: 'websocket' | 'email',
-    userId: string,
-    notificationData: {
-      subject: string;
-      message: string;
-      type?: string;
-      priority?: string;
-    }
-  ): Promise<boolean> {
-    switch (channel) {
-      case 'websocket':
-        try {
-          // Build unified payload for WebSocket system notification
-          // System notifications use DEALABS as default siteId (not site-specific)
-          const systemPayload: UnifiedNotificationPayload = {
-            id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-            siteId: SiteSource.DEALABS, // Default for system notifications
-            type: 'SYSTEM',
-            title: notificationData.subject || 'System Notification',
-            message: notificationData.message || 'You have a new system notification',
-            data: {
-              systemType: notificationData.type,
-            },
-            timestamp: new Date().toISOString(),
-            read: false,
-          };
-
-          return await this.websocketGateway.sendToUser(userId, systemPayload);
-        } catch (error) {
-          this.logger.error(`🔌 WebSocket system notification error:`, error);
-          return false;
-        }
-
-      case 'email':
-        try {
-          const preferences =
-            await this.notificationPreferencesService.getUserPreferences(
-              userId
-            );
-          const userEmail = preferences?.channels.email.address;
-
-          if (!userEmail || !preferences?.channels.email.verified) {
-            this.logger.debug(
-              `📧 No verified email for system notification to ${userId}`
-            );
-            return false;
-          }
-
-          return await this.emailService.sendSystemNotification(
-            userEmail,
-            notificationData.subject || 'System Notification',
-            notificationData.message,
-            userId
-          );
-        } catch (error) {
-          this.logger.error(`📧 Email system notification error:`, error);
-          return false;
-        }
-
-      default:
-        this.logger.warn(`Unknown system notification channel: ${channel}`);
-        return false;
-    }
-  }
-
-  @Process('retry-notification')
-  async handleRetryNotification(job: Job<{ deliveryId: string }>) {
-    const { deliveryId } = job.data;
-
-    return withErrorHandling(
-      this.logger,
-      `processing notification retry for delivery ${deliveryId}`,
-      async () => {
-        this.logger.log(
-          `🔄 Processing notification retry for delivery ${deliveryId}`
-        );
-
-        const delivery = await this.deliveryTracking.getDelivery(deliveryId);
-        if (!delivery) {
-          this.logger.warn(`Delivery ${deliveryId} not found for retry`);
-          return;
-        }
-
-        // Check if we should still retry
-        if (delivery.finalStatus !== 'pending' || delivery.attempts.length >= 3) {
-          this.logger.debug(
-            `Delivery ${deliveryId} cannot be retried (status: ${delivery.finalStatus}, attempts: ${delivery.attempts.length})`
-          );
-          return;
-        }
-
-        // Get unified payload from delivery (already properly typed)
-        const unifiedPayload = delivery.notificationPayload;
-
-        if (!unifiedPayload) {
-          this.logger.error(
-            `❌ Delivery ${deliveryId} has no notification payload, cannot retry`
-          );
-          return;
-        }
-
-        // Get user context again for retry
-        const userStatus = await this.userStatusService.getUserStatus(
-          delivery.userId
-        );
-
-        // Build notification context for preferences check using unified payload data
-        const dealData = unifiedPayload.data?.dealData;
-        const retryContext: NotificationContext = {
-          userId: delivery.userId,
-          notificationType: 'deal-match', // Most retries are for deal matches
-          priority: delivery.priority as 'high' | 'normal' | 'low',
-          dealData: {
-            title: dealData?.title || 'Deal Alert',
-            price: dealData?.price || 0,
-            merchant: dealData?.merchant || 'Unknown',
-            category: 'general',
-          },
-          userActivity: {
-            isOnline: userStatus?.isOnline ?? false,
-            isActive: userStatus?.isActive ?? false,
-            lastActivity: userStatus?.lastActivity ?? new Date(0),
-            deviceType: userStatus?.deviceType ?? 'web',
-          },
-        };
-
-        // Check if notification should be sent for retry
-        const permissionResult =
-          await this.notificationPreferencesService.shouldSendNotification(
-            retryContext
-          );
-
-        if (!permissionResult.allowed) {
-          this.logger.debug(
-            `❌ Retry blocked for delivery ${deliveryId}: ${permissionResult.reason}`
-          );
-          return;
-        }
-
-        const channels = permissionResult.channels;
-
-        if (channels.length === 0) {
-          this.logger.debug(
-            `No suitable channels for retry of delivery ${deliveryId}`
-          );
-          return;
-        }
-
-        // Retry sending using existing delivery ID (which has the unified payload stored)
-        const deliveryResults = await this.sendNotificationsWithTracking(
-          deliveryId,
-          delivery.userId,
-          [...channels] // Convert readonly array to mutable array
-        );
-
-        const successfulChannels = Object.entries(deliveryResults)
-          .filter(([_, success]) => success)
-          .map(([channel, _]) => channel);
-
-        if (successfulChannels.length > 0) {
-          this.logger.log(
-            `✅ Retry successful for delivery ${deliveryId} via: ${successfulChannels.join(', ')}`
-          );
-        } else {
-          this.logger.warn(`❌ Retry failed for delivery ${deliveryId}`);
-        }
-      }
-    );
-  }
-
-  @Process('digest-notification')
-  async handleDigestNotification(job: Job<any>) {
-    const { userId, matches, frequency } = job.data;
-
-    return withErrorHandling(
-      this.logger,
-      `processing ${frequency} digest notification for user ${userId}`,
-      async () => {
-        this.logger.log(
-          `📊 Processing ${frequency} digest for user ${userId} with ${matches.length} matches`
-        );
-
-        if (matches.length === 0) {
-          this.logger.debug(`No matches to include in digest for user ${userId}`);
-          return;
-        }
-
-        // Get user preferences and email
-        const emailPreferences =
-          await this.notificationPreferencesService.getUserPreferences(userId);
-        const userEmail = emailPreferences?.channels.email.address;
-
-        if (!userEmail || !emailPreferences?.channels.email.verified) {
-          this.logger.debug(`📧 No verified email for digest for user ${userId}`);
-          return;
-        }
-
-        // Check if user wants digest emails
-        if (!emailPreferences.categories.digest) {
-          this.logger.debug(`📧 Digest emails disabled for user ${userId}`);
-          return;
-        }
-
-        // Transform matches for email template
-        interface EmailMatch {
-          article?: { title?: string; currentPrice?: number; url?: string; merchant?: string };
-          dealData?: { title?: string; price?: number; url?: string; merchant?: string };
-          score?: number;
-          filter?: { name?: string };
-        }
-
-        const emailMatches = matches.map((match: EmailMatch) => ({
-          title: match.article?.title || match.dealData?.title || 'Deal Alert',
-          price: match.article?.currentPrice || match.dealData?.price || 0,
-          url: match.article?.url || match.dealData?.url || '#',
-          score: match.score || 0,
-          merchant:
-            match.article?.merchant || match.dealData?.merchant || 'Unknown',
-          filterName: match.filter?.name || 'Deal Filter',
-        }));
-
-        // Send digest email
-        const success = await this.emailService.sendDigestEmail(
-          userEmail,
-          emailMatches,
-          frequency as 'daily' | 'weekly',
-          userId
-        );
-
-        if (success) {
-          this.logger.log(`✅ ${frequency} digest email sent to user ${userId}`);
-        } else {
-          this.logger.error(
-            `❌ Failed to send ${frequency} digest email to user ${userId}`
-          );
-          throw new Error('Digest email sending failed');
-        }
-      }
     );
   }
 
@@ -705,7 +357,8 @@ export class NotificationProcessor {
         };
 
         // Create delivery tracking for verification email
-        const deliveryId = await this.deliveryTracking.createDelivery({
+        // Verification payloads carry no matchId/dedupKey, so they never dedup.
+        const { deliveryId } = await this.deliveryTracking.createDelivery({
           userId,
           type: 'verification',
           priority: 'high',
@@ -841,7 +494,8 @@ export class NotificationProcessor {
           read: false,
         };
 
-        const deliveryId = await this.deliveryTracking.createDelivery({
+        // Password-reset payloads carry no matchId/dedupKey, so they never dedup.
+        const { deliveryId } = await this.deliveryTracking.createDelivery({
           userId,
           type: 'password-reset',
           priority: 'high',

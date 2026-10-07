@@ -49,7 +49,7 @@ describe('Filter Management - Comprehensive E2E', () => {
         {
           field: 'title',
           operator: 'CONTAINS',
-          value: 'laptop',
+          value: 'smartphone',
           weight: 1.0,
         },
         {
@@ -1100,17 +1100,38 @@ describe('Filter Management - Comprehensive E2E', () => {
   });
 
   describe('Data Reliability and Consistency', () => {
+    // Shared helper: load all dealabs LLM fixture expected outputs as FixtureArticle[]
+    // Prices in .expected.json are in euros (Float, matching Article.currentPrice and the
+    // scraper's extracted values); free items are null — normalize null to 0.
+    const loadDealabsFixtures = (): Cypress.Chainable<FixtureArticle[]> =>
+      cy
+        .fixture('../../apps/scraper/src/llm-extraction/sites/dealabs/fixtures/dealabs-001.expected.json')
+        .then((d1) =>
+          cy
+            .fixture('../../apps/scraper/src/llm-extraction/sites/dealabs/fixtures/dealabs-002.expected.json')
+            .then((d2) =>
+              cy
+                .fixture('../../apps/scraper/src/llm-extraction/sites/dealabs/fixtures/dealabs-003.expected.json')
+                .then((d3) =>
+                  [d1, d2, d3].map((d) => ({
+                    ...(d as FixtureArticle),
+                    currentPrice:
+                      (d as { currentPrice: number | null }).currentPrice ?? 0,
+                  }))
+                )
+            )
+        );
+
     it('should validate fixture data integrity', function () {
       cy.task(
         'log',
         '🧪 Validating fixture data integrity with filter matching...'
       );
 
-      // Step 1: Load fixture data to understand what we're testing against
-      cy.fixture('../../apps/scraper/test/fixtures/correct-deals.json').then(
-        (fixtureDeals: FixtureArticle[]) => {
+      // Step 1: Load fixture data from LLM extraction expected outputs
+      loadDealabsFixtures().then((fixtureDeals: FixtureArticle[]) => {
           cy.log(
-            `📊 Loaded ${fixtureDeals.length} deals from fixture for validation`
+            `📊 Loaded ${fixtureDeals.length} deals from LLM fixtures for validation`
           );
 
           // Step 2: Analyze fixture data to determine price and heat ranges
@@ -1138,15 +1159,9 @@ describe('Filter Management - Comprehensive E2E', () => {
             categories: ['accessoires-gaming'], // Matches the fixture category
             rules: [
               {
-                field: 'currentPrice',
-                operator: '<=',
-                value: '100', // Should match 6 out of 8 deals
-                weight: 1.0,
-              },
-              {
                 field: 'temperature',
                 operator: '>=',
-                value: '0', // Should match deals with positive heat
+                value: '200', // Should match 2 out of 3 deals (Samsung S26 at 221° and Philips TV at 297°)
                 weight: 1.0,
               },
             ],
@@ -1154,8 +1169,9 @@ describe('Filter Management - Comprehensive E2E', () => {
           };
 
           // Step 4: Calculate expected matches from fixture data based on filter rules
+          // Note: free items have currentPrice=null in fixtures; temperature-only filter avoids null price issues
           const expectedMatches = fixtureDeals
-            .filter((deal) => deal.currentPrice <= 100 && deal.temperature >= 0)
+            .filter((deal) => deal.temperature >= 200)
             .sort((a, b) => a.currentPrice - b.currentPrice); // Sort by price ASC (visible column)
 
           cy.log(
@@ -1190,6 +1206,7 @@ describe('Filter Management - Comprehensive E2E', () => {
               }
             }
           );
+          cy.wait(60000);
 
           // Step 9: Navigate to filter detail page
           cy.get('[data-cy=filter-card]').contains(testFilter.name).click();
@@ -1201,8 +1218,10 @@ describe('Filter Management - Comprehensive E2E', () => {
           );
 
           // Step 11: Wait for SmartScrapingStatus loader to be hidden (scraping complete)
+          // Timeout must exceed real scrape+match job duration (LLM extraction is slow),
+          // otherwise the table is read before all matches are created.
           cy.log('⏳ Waiting for scraping status to complete...');
-          cy.get('[data-cy=scraping-status-loader]', { timeout: 15000 }).should(
+          cy.get('[data-cy=scraping-status-loader]', { timeout: 120000 }).should(
             'not.exist'
           );
 
@@ -1288,14 +1307,14 @@ describe('Filter Management - Comprehensive E2E', () => {
         '🧪 Testing match deletion when filter criteria is changed...'
       );
 
-      // Step 1: Load fixture data
-      cy.fixture('../../apps/scraper/test/fixtures/correct-deals.json').then(
-        (fixtureDeals: FixtureArticle[]) => {
+      // Step 1: Load fixture data from LLM extraction expected outputs
+      loadDealabsFixtures().then((fixtureDeals: FixtureArticle[]) => {
           cy.log(
-            `📊 Loaded ${fixtureDeals.length} deals from fixture for match deletion test`
+            `📊 Loaded ${fixtureDeals.length} deals from LLM fixtures for match deletion test`
           );
 
           // Step 2: Create filter that will match fixture data
+          // temperature >= 200 matches 2 of 3 fixture deals (Samsung S26 temp=221, Philips TV temp=297)
           const testFilter = {
             name: 'Match Deletion Test Filter',
             description:
@@ -1303,9 +1322,9 @@ describe('Filter Management - Comprehensive E2E', () => {
             categories: ['accessoires-gaming'],
             rules: [
               {
-                field: 'currentPrice',
-                operator: '<=',
-                value: '100',
+                field: 'temperature',
+                operator: '>=',
+                value: '200',
                 weight: 1.0,
               },
             ],
@@ -1333,9 +1352,11 @@ describe('Filter Management - Comprehensive E2E', () => {
             'be.visible'
           );
 
-          // Step 7: Wait for scraping to complete
+          // Step 7: Wait for scraping to complete — MUST finish before editing the
+          // filter, else a still-running scrape job creates matches after the
+          // edit's deleteMany and leaves a stale row. Timeout exceeds job duration.
           cy.log('⏳ Waiting for scraping and matching to complete...');
-          cy.get('[data-cy=scraping-status-loader]', { timeout: 15000 }).should(
+          cy.get('[data-cy=scraping-status-loader]', { timeout: 120000 }).should(
             'not.exist'
           );
           cy.wait(2000); // Allow time for async processing
@@ -1371,11 +1392,11 @@ describe('Filter Management - Comprehensive E2E', () => {
                   );
 
                   // Step 11: Change filter criteria to no longer match existing deals
-                  // Clear existing rules and add a very restrictive rule
-                  cy.get('[data-cy=rule-value-input-currentPrice-lte-0]')
+                  // Raise threshold from 200 to 10000 — no deal has temperature >= 10000
+                  cy.get('[data-cy=rule-value-input-temperature-gte-0]')
                     .should('be.visible')
                     .clear()
-                    .type('1'); // Change from <=100 to <=1 (will match nothing)
+                    .type('10000');
 
                   // Step 12: Submit filter update
                   cy.get('[data-cy=update-filter-submit]')
@@ -1405,13 +1426,17 @@ describe('Filter Management - Comprehensive E2E', () => {
                   }).should('be.visible');
 
                   cy.get('body').then(($body) => {
-                    // Table should either not exist or have 0 rows
+                    // Table should either not exist or show zero PRODUCT rows.
+                    // When there are 0 matches the table still renders a single
+                    // empty-state <tr> ("No products found"), so assert on the
+                    // count of real product rows (which carry cell-title), not
+                    // raw tbody tr.
                     if (
                       $body.find('[data-cy="matching-products-table"]').length >
                       0
                     ) {
                       cy.get('[data-cy="matching-products-table"]')
-                        .find('tbody tr')
+                        .find('[data-cy="cell-title"]')
                         .should('have.length', 0);
                       cy.log(
                         `✅ Match table is now empty (was ${matchCountBefore} matches before edit)`

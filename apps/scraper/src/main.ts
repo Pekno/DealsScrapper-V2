@@ -82,23 +82,6 @@ async function bootstrap(): Promise<void> {
     );
   }
 
-  // Check ElasticSearch connectivity
-  try {
-    const { DealElasticSearchService } = await import(
-      './elasticsearch/services/deal-elasticsearch.service.js'
-    );
-    const elasticSearchService = app.get(DealElasticSearchService);
-    // The service initializes automatically via onModuleInit, so just check if it's available
-    logger.log(
-      `🔍 ElasticSearch dual index system ready (deduplication & evolution tracking)`
-    );
-  } catch (error) {
-    logger.warn(
-      `⚠️ ElasticSearch service initialization issue: ${(error as Error).message}`
-    );
-    logger.warn(`🔧 Scraper will continue without ElasticSearch features`);
-  }
-
   // Check Redis connectivity before starting job processor
   const configuredSite = getConfiguredSite();
   const targetQueueName = configuredSite

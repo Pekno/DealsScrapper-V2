@@ -159,11 +159,11 @@ The largest service in the API, managing the full filter lifecycle with schedule
 
 ### FilterMatcherService (`filters/services/filter-matcher.service.ts`)
 
-Implements the rule-based filter matching engine. `matchArticle()` fetches all active filters whose categories match the article's site, then evaluates each filter's expression tree against the article. `evaluateFilterExpression()` supports boolean evaluation (AND/OR/NOT across top-level rules) and score-based evaluation (weighted, percentage, or points modes with a `minScore` threshold). Individual rules are evaluated by `evaluateRule()`, which handles site-specific rule skipping (rules with `siteSpecific` that don't match the article's source are treated as passing). Field values are extracted from both the base `Article` and site-specific extension, with computed field support for aliases like `price` (currentPrice), `heat` (temperature), `discountPercent`, and `age` (hours since scrape).
+Implements the rule-based filter matching engine. `matchArticle()` fetches all active filters whose categories match the article's site, then evaluates each filter's expression tree against the article. `evaluateFilterExpression()` supports boolean evaluation (AND/OR/NOT across top-level rules) and score-based evaluation (normalized 0-100 score with a `minScore` threshold). Individual rules are evaluated by `evaluateRule()`, which handles site-specific rule skipping (rules with `siteSpecific` that don't match the article's source are treated as passing). Field values are extracted from both the base `Article` and site-specific extension, with computed field support for aliases like `price` (currentPrice), `heat` (temperature), `discountPercent`, and `age` (hours since scrape).
 
 **Key behaviors:**
 - `matchArticle()` queries active filters by category site match, evaluates each expression
-- `evaluateFilterExpression()` supports AND/OR/NOT boolean logic and score-based matching (minScore + scoreMode)
+- `evaluateFilterExpression()` supports AND/OR/NOT boolean logic and score-based matching (minScore)
 - `evaluateRule()` skips site-specific rules that don't match article source (returns true to not break match)
 - `getFieldValue()` resolves base fields, extension fields, and computed aliases (price, heat, discountPercent, age)
 - Supports operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `CONTAINS`, `NOT_CONTAINS`, `STARTS_WITH`, `ENDS_WITH`, `REGEX`, `NOT_REGEX`, `EQUALS`, `NOT_EQUALS`, `IN`, `NOT_IN`, `INCLUDES_ANY`, `INCLUDES_ALL`, `NOT_INCLUDES_ANY`, `IS_TRUE`, `IS_FALSE`, `BEFORE`, `AFTER`, `BETWEEN`, `OLDER_THAN`, `NEWER_THAN`

@@ -8,7 +8,9 @@ describe('RolesGuard', () => {
   let guard: RolesGuard;
   let reflector: Reflector;
 
-  const createMockExecutionContext = (user?: { role: string }): ExecutionContext => {
+  const createMockExecutionContext = (user?: {
+    role: string;
+  }): ExecutionContext => {
     return {
       getHandler: jest.fn(),
       getClass: jest.fn(),
@@ -41,35 +43,45 @@ describe('RolesGuard', () => {
 
   it('should allow access when user has the required role', () => {
     const context = createMockExecutionContext({ role: UserRole.ADMIN });
-    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([UserRole.ADMIN]);
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockReturnValue([UserRole.ADMIN]);
 
     expect(guard.canActivate(context)).toBe(true);
   });
 
   it('should deny access when user lacks the required role', () => {
     const context = createMockExecutionContext({ role: UserRole.USER });
-    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([UserRole.ADMIN]);
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockReturnValue([UserRole.ADMIN]);
 
     expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
   });
 
   it('should deny access when no user is on the request', () => {
     const context = createMockExecutionContext(undefined);
-    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([UserRole.ADMIN]);
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockReturnValue([UserRole.ADMIN]);
 
     expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
   });
 
   it('should allow access when user has one of multiple required roles', () => {
     const context = createMockExecutionContext({ role: UserRole.ADMIN });
-    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([UserRole.USER, UserRole.ADMIN]);
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockReturnValue([UserRole.USER, UserRole.ADMIN]);
 
     expect(guard.canActivate(context)).toBe(true);
   });
 
   it('should use correct metadata key from ROLES_KEY', () => {
     const context = createMockExecutionContext({ role: UserRole.USER });
-    const spy = jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(undefined);
+    const spy = jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockReturnValue(undefined);
 
     guard.canActivate(context);
 

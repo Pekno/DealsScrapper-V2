@@ -68,6 +68,7 @@ export const INFRA_SERVICES = [
   'redis-test',
   'elasticsearch-test',
   'mailhog-test',
+  'ollama-test',
 ] as const;
 
 export const TEST_COMPOSE_FILE = 'docker-compose.test.yml';

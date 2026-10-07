@@ -11,6 +11,7 @@ import { dataCy } from '@/shared/lib/test-utils';
 import { SiteBadge } from '@/shared/ui';
 import type { TableColumnDefinition } from '@dealscrapper/shared-types';
 import type { SiteInfo } from '@/shared/hooks/useSiteRegistry';
+import { DealSuggestions } from './DealSuggestions';
 
 export interface ProductsTableRowProps {
   /** Article data to display */
@@ -450,6 +451,8 @@ export const ProductsTableRow: React.FC<ProductsTableRowProps> = ({
   columns,
   getSiteByName,
 }) => {
+  const [isExpanded, setIsExpanded] = React.useState(false);
+
   /**
    * Handle row click to redirect to deal URL
    */
@@ -459,28 +462,70 @@ export const ProductsTableRow: React.FC<ProductsTableRowProps> = ({
     }
   };
 
+  /**
+   * Toggle the cross-site suggestions detail row.
+   * stopPropagation prevents triggering the row's own navigation handler.
+   */
+  const handleToggle = (event: React.MouseEvent): void => {
+    event.stopPropagation();
+    setIsExpanded((prev) => !prev);
+  };
+
   return (
-    <tr
-      key={article.id}
-      className={
-        article.isExpired ? tableStyles.expiredTableRow : tableStyles.tableRow
-      }
-      onClick={handleRowClick}
-      style={{ cursor: 'pointer' }}
-      title={`Click to view deal: ${article.title}${article.isExpired ? ' (EXPIRED)' : ''}`}
-      {...dataCy(`match-${article.id}`)}
-    >
-      {columns.map((column) => (
-        <td
-          key={column.key}
-          className={getCellClass(column.key)}
-          style={{ textAlign: column.align || 'left' }}
-          {...dataCy(`cell-${column.key}`)}
-        >
-          {renderCellContent(column, article, getSiteByName)}
-        </td>
-      ))}
-    </tr>
+    <>
+      <tr
+        key={article.id}
+        className={
+          article.isExpired ? tableStyles.expiredTableRow : tableStyles.tableRow
+        }
+        onClick={handleRowClick}
+        style={{ cursor: 'pointer' }}
+        title={`Click to view deal: ${article.title}${article.isExpired ? ' (EXPIRED)' : ''}`}
+        {...dataCy(`match-${article.id}`)}
+      >
+        {columns.map((column) => (
+          <td
+            key={column.key}
+            className={getCellClass(column.key)}
+            style={{ textAlign: column.align || 'left' }}
+            {...dataCy(`cell-${column.key}`)}
+          >
+            {column.key === 'title' && (
+              <button
+                type="button"
+                onClick={handleToggle}
+                aria-expanded={isExpanded}
+                aria-label={
+                  isExpanded ? 'Hide cross-site matches' : 'Show cross-site matches'
+                }
+                style={{
+                  cursor: 'pointer',
+                  background: 'none',
+                  border: 'none',
+                  marginRight: '6px',
+                  color: '#6B7280',
+                }}
+                {...dataCy(`toggle-suggestions-${article.id}`)}
+              >
+                {isExpanded ? '▾' : '▸'}
+              </button>
+            )}
+            {renderCellContent(column, article, getSiteByName)}
+          </td>
+        ))}
+      </tr>
+      {isExpanded && (
+        <tr {...dataCy(`suggestions-row-${article.id}`)}>
+          <td colSpan={columns.length} style={{ padding: 0 }}>
+            <DealSuggestions
+              articleId={article.id}
+              enabled={isExpanded}
+              getSiteByName={getSiteByName}
+            />
+          </td>
+        </tr>
+      )}
+    </>
   );
 };
 

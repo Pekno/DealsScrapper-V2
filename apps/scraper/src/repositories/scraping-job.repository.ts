@@ -89,6 +89,8 @@ export class ScrapingJobRepository extends AbstractBaseRepository<
       dealsFound?: number;
       dealsProcessed?: number;
       executionTimeMs?: number;
+      scrapingTimeMs?: number;
+      ollamaExtractionTimeMs?: number;
       metadata?: Record<string, unknown>;
     }
   ): Promise<ScrapingJob> {
@@ -100,6 +102,8 @@ export class ScrapingJobRepository extends AbstractBaseRepository<
         dealsFound: results.dealsFound,
         dealsProcessed: results.dealsProcessed,
         executionTimeMs: results.executionTimeMs,
+        scrapingTimeMs: results.scrapingTimeMs,
+        ollamaExtractionTimeMs: results.ollamaExtractionTimeMs,
         metadata: results.metadata as Prisma.InputJsonValue | undefined,
       }
     );
@@ -115,7 +119,8 @@ export class ScrapingJobRepository extends AbstractBaseRepository<
   async markFailed(
     jobId: string,
     error: string,
-    executionTimeMs?: number
+    executionTimeMs?: number,
+    scrapingTimeMs?: number
   ): Promise<ScrapingJob> {
     return this.update(
       { id: jobId },
@@ -124,6 +129,7 @@ export class ScrapingJobRepository extends AbstractBaseRepository<
         completedAt: new Date(),
         error,
         executionTimeMs,
+        scrapingTimeMs,
       }
     );
   }

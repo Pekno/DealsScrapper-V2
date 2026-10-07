@@ -5,12 +5,51 @@
  * Focus on business-relevant notification types and user interactions.
  */
 
-export const createDealMatchNotification = (overrides = {}) => ({
+/**
+ * Deal-match notification payload data. Includes the canonical processor keys
+ * (`title`, `price`, `url`, ...) plus the alternate keys some tests provide
+ * (`dealTitle`, `currentPrice`, `dealUrl`, `store`, ...), which the test helper
+ * normalizes before building the queue job.
+ */
+export interface DealMatchNotificationData {
+  title?: string;
+  price?: number;
+  originalPrice?: number;
+  currentPrice?: number;
+  discountPercentage?: number;
+  merchant?: string;
+  store?: string;
+  url?: string;
+  dealUrl?: string;
+  dealTitle?: string;
+  score?: number;
+  category?: string;
+  expiresAt?: Date;
+  matchedFilterId?: string;
+  imageUrl?: string;
+  temperature?: number;
+  // Tests attach scenario-specific extra fields (e.g. matchScore, auditRequired).
+  [key: string]: unknown;
+}
+
+export interface DealMatchNotification {
+  type: string;
+  title: string;
+  message: string;
+  channels: string[];
+  priority: string;
+  data: DealMatchNotificationData;
+}
+
+export const createDealMatchNotification = (
+  overrides: Partial<DealMatchNotification> = {}
+): DealMatchNotification => ({
   type: 'deal-match',
   title: 'Great Gaming Laptop Deal Found!',
   message: 'MSI Gaming Laptop - RTX 4060, 16GB RAM - Now €799 (was €1099)',
   channels: ['email', 'websocket'],
   priority: 'high',
+  ...overrides,
   data: {
     title: 'MSI Gaming Laptop GF63 Thin 15.6"', // Required for processor
     price: 799, // Required for processor (maps to currentPrice)
@@ -23,8 +62,8 @@ export const createDealMatchNotification = (overrides = {}) => ({
     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
     matchedFilterId: '123e4567-e89b-12d3-a456-426614174000',
     imageUrl: 'https://example.com/laptop.jpg',
+    ...overrides.data,
   },
-  ...overrides,
 });
 
 export const createPriceDropNotification = (overrides = {}) => ({

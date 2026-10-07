@@ -15,6 +15,7 @@ import {
   getEmailMessages,
   clearEmailMessages,
 } from './test/support/email-helpers';
+import { drainScrapeQueues } from './test/support/queue-helpers';
 
 export default defineConfig({
   e2e: {
@@ -76,6 +77,13 @@ export default defineConfig({
         // Database helpers
         'db:cleanup': async () => {
           await cleanupDatabase();
+          return null;
+        },
+
+        // Drain in-flight scrape/match jobs before cleanup so slow jobs from a
+        // prior test cannot create matches against articles cleanup just deleted.
+        'queue:drainScrape': async () => {
+          await drainScrapeQueues();
           return null;
         },
 

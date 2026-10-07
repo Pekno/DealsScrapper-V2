@@ -63,7 +63,7 @@ interface PaginatedAdminUsersResponse {
 export class AdminController {
   constructor(
     private readonly adminService: AdminService,
-    private readonly auditLogger: AuditLoggerService,
+    private readonly auditLogger: AuditLoggerService
   ) {}
 
   /**
@@ -95,9 +95,13 @@ export class AdminController {
   @Get('health/api')
   @ApiOperation({
     summary: 'Get API health',
-    description: 'Returns API service health data by calling the health service directly.',
+    description:
+      'Returns API service health data by calling the health service directly.',
   })
-  @ApiOkResponse({ description: 'API health retrieved successfully', type: ServiceHealthDto })
+  @ApiOkResponse({
+    description: 'API health retrieved successfully',
+    type: ServiceHealthDto,
+  })
   async getApiHealth(): Promise<StandardApiResponse<ServiceHealthDto>> {
     const health = await this.adminService.getApiHealth();
     return createSuccessResponse(health, 'API health retrieved successfully');
@@ -112,10 +116,16 @@ export class AdminController {
     summary: 'Get Notifier health',
     description: 'Proxies health check to the notifier service.',
   })
-  @ApiOkResponse({ description: 'Notifier health retrieved successfully', type: ServiceHealthDto })
+  @ApiOkResponse({
+    description: 'Notifier health retrieved successfully',
+    type: ServiceHealthDto,
+  })
   async getNotifierHealth(): Promise<StandardApiResponse<ServiceHealthDto>> {
     const health = await this.adminService.getNotifierHealth();
-    return createSuccessResponse(health, 'Notifier health retrieved successfully');
+    return createSuccessResponse(
+      health,
+      'Notifier health retrieved successfully'
+    );
   }
 
   /**
@@ -132,9 +142,14 @@ export class AdminController {
     description: 'Scheduler health retrieved successfully',
     type: SchedulerHealthResponseDto,
   })
-  async getSchedulerHealth(): Promise<StandardApiResponse<SchedulerHealthResponseDto>> {
+  async getSchedulerHealth(): Promise<
+    StandardApiResponse<SchedulerHealthResponseDto>
+  > {
     const health = await this.adminService.getSchedulerHealth();
-    return createSuccessResponse(health, 'Scheduler health retrieved successfully');
+    return createSuccessResponse(
+      health,
+      'Scheduler health retrieved successfully'
+    );
   }
 
   /**
@@ -144,9 +159,13 @@ export class AdminController {
   @Get('metrics')
   @ApiOperation({
     summary: 'Get platform metrics',
-    description: 'Returns platform-wide metrics including user count, filter count, matches, and active sessions.',
+    description:
+      'Returns platform-wide metrics including user count, filter count, matches, and active sessions.',
   })
-  @ApiOkResponse({ description: 'Metrics retrieved successfully', type: DashboardMetricsDto })
+  @ApiOkResponse({
+    description: 'Metrics retrieved successfully',
+    type: DashboardMetricsDto,
+  })
   async getMetrics(): Promise<StandardApiResponse<DashboardMetricsDto>> {
     const metrics = await this.adminService.getMetrics();
     return createSuccessResponse(metrics, 'Metrics retrieved successfully');
@@ -208,13 +227,18 @@ export class AdminController {
   async updateUserRole(
     @Param('id') id: string,
     @Body() dto: UpdateUserRoleDto,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: AuthenticatedRequest
   ): Promise<StandardApiResponse<AdminUserResponseDto>> {
     const updatedUser = await this.adminService.updateUserRole(id, dto.role);
-    this.auditLogger.log(AuditAction.USER_ROLE_CHANGED, req.user.id, req.user.email, {
-      targetUserId: id,
-      newRole: dto.role,
-    });
+    this.auditLogger.log(
+      AuditAction.USER_ROLE_CHANGED,
+      req.user.id,
+      req.user.email,
+      {
+        targetUserId: id,
+        newRole: dto.role,
+      }
+    );
     return createSuccessResponse(updatedUser, 'User role updated successfully');
   }
 
@@ -238,9 +262,14 @@ export class AdminController {
     @Request() req: AuthenticatedRequest
   ): Promise<StandardApiResponse<null>> {
     await this.adminService.deleteUser(id, req.user.id);
-    this.auditLogger.log(AuditAction.USER_DELETED, req.user.id, req.user.email, {
-      targetUserId: id,
-    });
+    this.auditLogger.log(
+      AuditAction.USER_DELETED,
+      req.user.id,
+      req.user.email,
+      {
+        targetUserId: id,
+      }
+    );
     return createSuccessResponse(null, 'User deleted successfully');
   }
 
@@ -257,7 +286,8 @@ export class AdminController {
   })
   @ApiParam({ name: 'id', description: 'User ID' })
   @ApiOkResponse({
-    description: 'Password reset link generated — email queued or URL returned for manual sharing',
+    description:
+      'Password reset link generated — email queued or URL returned for manual sharing',
     schema: {
       type: 'object',
       properties: {
@@ -271,7 +301,8 @@ export class AdminController {
               properties: {
                 resetUrl: {
                   type: 'string',
-                  example: 'https://app.example.com/auth/reset-password?token=eyJ...',
+                  example:
+                    'https://app.example.com/auth/reset-password?token=eyJ...',
                 },
               },
             },
@@ -283,12 +314,17 @@ export class AdminController {
   @ApiNotFoundResponse({ description: 'User not found' })
   async resetUserPassword(
     @Param('id') id: string,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: AuthenticatedRequest
   ): Promise<StandardApiResponse<{ resetUrl: string } | null>> {
     const result = await this.adminService.resetUserPassword(id);
-    this.auditLogger.log(AuditAction.USER_PASSWORD_RESET, req.user.id, req.user.email, {
-      targetUserId: id,
-    });
+    this.auditLogger.log(
+      AuditAction.USER_PASSWORD_RESET,
+      req.user.id,
+      req.user.email,
+      {
+        targetUserId: id,
+      }
+    );
 
     if (result === null) {
       return createSuccessResponse(null, 'Password reset link sent to user');
@@ -296,7 +332,7 @@ export class AdminController {
 
     return createSuccessResponse(
       { resetUrl: result.resetUrl },
-      'No email provider configured — share this link with the user',
+      'No email provider configured — share this link with the user'
     );
   }
 }

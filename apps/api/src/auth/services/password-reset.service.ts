@@ -43,9 +43,11 @@ export class PasswordResetService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly sharedConfig: SharedConfigService,
-    private readonly usersService: UsersService,
+    private readonly usersService: UsersService
   ) {
-    this.passwordResetSecret = this.sharedConfig.get<string>('PASSWORD_RESET_SECRET');
+    this.passwordResetSecret = this.sharedConfig.get<string>(
+      'PASSWORD_RESET_SECRET'
+    );
     this.passwordResetExpiresIn =
       this.sharedConfig.get<string>('PASSWORD_RESET_EXPIRES_IN') ?? '30m';
     this.webAppUrl = this.sharedConfig.get<string>('WEB_APP_URL');
@@ -68,7 +70,7 @@ export class PasswordResetService {
   generateResetToken(
     userId: string,
     email: string,
-    expiresIn = this.passwordResetExpiresIn,
+    expiresIn = this.passwordResetExpiresIn
   ): { token: string; resetUrl: string } {
     const payload: PasswordResetTokenPayload = {
       userId,
@@ -100,7 +102,7 @@ export class PasswordResetService {
       });
     } catch (error) {
       this.logger.warn(
-        `Invalid password reset token attempted: ${extractErrorMessage(error)}`,
+        `Invalid password reset token attempted: ${extractErrorMessage(error)}`
       );
       throw new BadRequestException('Invalid or expired reset token');
     }
@@ -138,7 +140,7 @@ export class PasswordResetService {
     const rounds = this.sharedConfig.get<string>('BCRYPT_ROUNDS');
     const hashedPassword = await bcryptjs.hash(
       newPassword,
-      parseInt(rounds, 10) || BCRYPT_ROUNDS,
+      parseInt(rounds, 10) || BCRYPT_ROUNDS
     );
 
     await this.usersService.update(userId, {

@@ -14,7 +14,6 @@ import {
   ElasticsearchService,
 } from '@nestjs/elasticsearch';
 import { PrismaService } from '@dealscrapper/database';
-import { DealElasticSearchService } from './services/deal-elasticsearch.service.js';
 import { ElasticsearchIndexerService } from './services/elasticsearch-indexer.service.js';
 import {
   buildElasticSearchConnectionConfig,
@@ -26,12 +25,10 @@ import {
  *
  * Responsibilities:
  * - Configure ElasticSearch client connection
- * - Provide DealElasticSearchService for legacy deal processing
  * - Provide ElasticsearchIndexerService for multi-site article indexing
  * - Handle connection validation and error scenarios
  *
  * Integration points:
- * - Used by DealExtractionService for batch deal processing
  * - Used by article extraction services for multi-site indexing
  * - Provides search endpoints for UI components
  * - Integrates with health check system
@@ -55,7 +52,6 @@ import {
     }),
   ],
   providers: [
-    DealElasticSearchService,
     ElasticsearchIndexerService,
     {
       provide: 'ELASTICSEARCH_CLIENT',
@@ -71,7 +67,6 @@ import {
     },
   ],
   exports: [
-    DealElasticSearchService,
     ElasticsearchIndexerService,
     ElasticsearchModule, // Export for direct client access if needed
   ],

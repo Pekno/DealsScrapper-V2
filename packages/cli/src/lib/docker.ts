@@ -137,6 +137,45 @@ export function shellCapture(
 }
 
 /**
+ * Run a docker compose command and stream each output line to a callback.
+ * Resolves when the process exits with code 0, rejects otherwise.
+ */
+export function composeStream(
+  composeFile: string,
+  args: string[],
+  onLine: (line: string) => void,
+  opts?: { cwd?: string; envFile?: string },
+): Promise<void> {
+  return new Promise((res, rej) => {
+    const cmd = getComposeCommand();
+    const fullArgs = [
+      ...cmd.slice(1),
+      '-f', resolve(PROJECT_ROOT, composeFile),
+    ];
+    // Use the explicit env file (e.g. .env.test) for ${VAR} substitution so the
+    // test stack binds its own ports, instead of inheriting the dev-oriented
+    // root .env that docker compose auto-loads.
+    if (opts?.envFile) fullArgs.push('--env-file', opts.envFile);
+    fullArgs.push(...args);
+
+    const child = winSpawn(cmd[0], fullArgs, {
+      cwd: opts?.cwd ?? PROJECT_ROOT,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const emit = (d: Buffer) => {
+      const line = d.toString().trim();
+      if (line) onLine(line);
+    };
+
+    child.stdout?.on('data', emit);
+    child.stderr?.on('data', emit);
+    child.on('close', (code) => (code === 0 ? res() : rej(new Error(`docker compose exited with code ${code}`))));
+    child.on('error', rej);
+  });
+}
+
+/**
  * Check if containers matching the given names are healthy via docker compose ps.
  */
 export function getHealthyContainerCount(composeFile: string, serviceNames: readonly string[]): number {

@@ -171,7 +171,9 @@ export class SanitizationMiddleware implements NestMiddleware {
               this.logger.warn(`🚨 Blocked potentially dangerous key: ${key}`);
               continue; // Skip this key entirely
             }
-            sanitized[key] = this.sanitizeObject((obj as Record<string, unknown>)[key]);
+            sanitized[key] = this.sanitizeObject(
+              (obj as Record<string, unknown>)[key]
+            );
           }
         }
       }

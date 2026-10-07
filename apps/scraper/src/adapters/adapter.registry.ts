@@ -4,6 +4,8 @@ import type { ISiteAdapter } from './base/site-adapter.interface.js';
 import { DealabsAdapter } from './dealabs/dealabs.adapter.js';
 import { VintedAdapter } from './vinted/vinted.adapter.js';
 import { LeBonCoinAdapter } from './leboncoin/leboncoin.adapter.js';
+import { ElectroDepotAdapter } from './electrodepot/electrodepot.adapter.js';
+import { FnacAdapter, DartyAdapter, BoulangerAdapter } from './retail/retail-adapters.js';
 
 /**
  * Site metadata for frontend display.
@@ -29,10 +31,18 @@ export class AdapterRegistry {
     private readonly dealabsAdapter: DealabsAdapter,
     private readonly vintedAdapter: VintedAdapter,
     private readonly leboncoinAdapter: LeBonCoinAdapter,
+    private readonly electroDepotAdapter: ElectroDepotAdapter,
+    private readonly fnacAdapter: FnacAdapter,
+    private readonly dartyAdapter: DartyAdapter,
+    private readonly boulangerAdapter: BoulangerAdapter,
   ) {
     this.register(dealabsAdapter);
     this.register(vintedAdapter);
     this.register(leboncoinAdapter);
+    this.register(electroDepotAdapter);
+    this.register(fnacAdapter);
+    this.register(dartyAdapter);
+    this.register(boulangerAdapter);
 
     this.logger.log(
       `Registered ${this.adapters.size} site adapters: ${Array.from(this.adapters.keys()).join(', ')}`,

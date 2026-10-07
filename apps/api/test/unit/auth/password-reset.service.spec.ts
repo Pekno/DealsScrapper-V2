@@ -57,7 +57,9 @@ describe('PasswordResetService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    mockSharedConfigService.get.mockImplementation((key: string) => CONFIG_MAP[key] ?? undefined);
+    mockSharedConfigService.get.mockImplementation(
+      (key: string) => CONFIG_MAP[key] ?? undefined
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -81,8 +83,12 @@ describe('PasswordResetService', () => {
       const result = service.generateResetToken('user-1', 'user@example.com');
 
       expect(mockJwtService.sign).toHaveBeenCalledWith(
-        { userId: 'user-1', email: 'user@example.com', purpose: 'password-reset' },
-        expect.objectContaining({ secret: 'test-password-reset-secret' }),
+        {
+          userId: 'user-1',
+          email: 'user@example.com',
+          purpose: 'password-reset',
+        },
+        expect.objectContaining({ secret: 'test-password-reset-secret' })
       );
       expect(result.token).toBe('signed-jwt-token');
       expect(result.resetUrl).toContain('/auth/reset-password?token=');
@@ -96,7 +102,7 @@ describe('PasswordResetService', () => {
 
       expect(mockJwtService.sign).toHaveBeenCalledWith(
         expect.any(Object),
-        expect.objectContaining({ expiresIn: '24h' }),
+        expect.objectContaining({ expiresIn: '24h' })
       );
     });
   });
@@ -108,10 +114,10 @@ describe('PasswordResetService', () => {
       });
 
       await expect(service.validateResetToken('bad-token')).rejects.toThrow(
-        BadRequestException,
+        BadRequestException
       );
       await expect(service.validateResetToken('bad-token')).rejects.toThrow(
-        'Invalid or expired reset token',
+        'Invalid or expired reset token'
       );
     });
 
@@ -123,12 +129,12 @@ describe('PasswordResetService', () => {
         iat: Math.floor(Date.now() / 1000),
       });
 
-      await expect(service.validateResetToken('bad-purpose-token')).rejects.toThrow(
-        BadRequestException,
-      );
-      await expect(service.validateResetToken('bad-purpose-token')).rejects.toThrow(
-        'Invalid reset token purpose',
-      );
+      await expect(
+        service.validateResetToken('bad-purpose-token')
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.validateResetToken('bad-purpose-token')
+      ).rejects.toThrow('Invalid reset token purpose');
     });
 
     it('should throw "Reset link has already been used" when passwordChangedAt is after token iat', async () => {
@@ -141,10 +147,13 @@ describe('PasswordResetService', () => {
         purpose: 'password-reset',
         iat: iatSeconds,
       });
-      mockUsersService.findById.mockResolvedValue({ ...mockUser, passwordChangedAt });
+      mockUsersService.findById.mockResolvedValue({
+        ...mockUser,
+        passwordChangedAt,
+      });
 
       await expect(service.validateResetToken('used-token')).rejects.toThrow(
-        'Reset link has already been used',
+        'Reset link has already been used'
       );
     });
 
@@ -157,7 +166,10 @@ describe('PasswordResetService', () => {
         purpose: 'password-reset',
         iat: iatSeconds,
       });
-      mockUsersService.findById.mockResolvedValue({ ...mockUser, passwordChangedAt: null });
+      mockUsersService.findById.mockResolvedValue({
+        ...mockUser,
+        passwordChangedAt: null,
+      });
 
       const result = await service.validateResetToken('valid-token');
 
@@ -171,7 +183,10 @@ describe('PasswordResetService', () => {
         purpose: 'password-reset',
         iat: Math.floor(Date.now() / 1000),
       });
-      mockUsersService.findById.mockResolvedValue({ ...mockUser, passwordChangedAt: null });
+      mockUsersService.findById.mockResolvedValue({
+        ...mockUser,
+        passwordChangedAt: null,
+      });
 
       const result = await service.validateResetToken('valid-token');
 
@@ -189,7 +204,10 @@ describe('PasswordResetService', () => {
         purpose: 'password-reset',
         iat: iatSeconds,
       });
-      mockUsersService.findById.mockResolvedValue({ ...mockUser, passwordChangedAt: null });
+      mockUsersService.findById.mockResolvedValue({
+        ...mockUser,
+        passwordChangedAt: null,
+      });
       mockUsersService.update.mockResolvedValue(mockUser as never);
 
       await service.resetPassword('valid-token', 'NewPassword1!');
@@ -199,7 +217,7 @@ describe('PasswordResetService', () => {
         expect.objectContaining({
           password: expect.stringMatching(/^\$2[ab]\$/),
           passwordChangedAt: expect.any(Date),
-        }),
+        })
       );
     });
 
@@ -209,7 +227,7 @@ describe('PasswordResetService', () => {
       });
 
       await expect(
-        service.resetPassword('expired-token', 'NewPassword1!'),
+        service.resetPassword('expired-token', 'NewPassword1!')
       ).rejects.toThrow(BadRequestException);
     });
   });

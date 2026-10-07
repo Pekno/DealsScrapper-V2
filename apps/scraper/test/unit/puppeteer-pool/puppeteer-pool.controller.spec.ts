@@ -19,6 +19,8 @@ describe('PuppeteerPoolController - Browser Infrastructure Monitoring', () => {
     successfulRequests: 150,
     failedRequests: 5,
     healthStatus: 'healthy',
+    memoryUsageMB: 512,
+    memoryThresholdMB: 1024,
   };
 
   beforeEach(async () => {
@@ -103,6 +105,8 @@ describe('PuppeteerPoolController - Browser Infrastructure Monitoring', () => {
         successfulRequests: 0,
         failedRequests: 0,
         healthStatus: 'degraded' as const,
+        memoryUsageMB: 0,
+        memoryThresholdMB: 1024,
       };
 
       puppeteerPoolService.getStats.mockReturnValue(emptyStats);

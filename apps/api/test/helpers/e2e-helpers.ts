@@ -10,6 +10,7 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   token: string;
+  password: string;
   firstName: string;
   lastName: string;
 }
@@ -27,7 +28,12 @@ function getSiteDefaults(siteId: string): {
 } {
   const siteConfigs: Record<
     string,
-    { name: string; baseUrl: string; categoryDiscoveryUrl: string; color: string }
+    {
+      name: string;
+      baseUrl: string;
+      categoryDiscoveryUrl: string;
+      color: string;
+    }
   > = {
     dealabs: {
       name: 'Dealabs',
@@ -117,8 +123,9 @@ export async function createAuthenticatedDealHunter(
     id: user.id,
     email: userData.email,
     token: loginResponse.body.data.access_token,
-    firstName: userData.firstName,
-    lastName: userData.lastName,
+    password: userData.password,
+    firstName: userData.firstName ?? '',
+    lastName: userData.lastName ?? '',
   };
 }
 

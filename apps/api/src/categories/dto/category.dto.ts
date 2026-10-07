@@ -83,7 +83,6 @@ export class CategoryDto {
   })
   userCount: number;
 
-
   @ApiPropertyOptional({
     description:
       'Full display path showing the category hierarchy (e.g., "Femmes → Vêtements → Shorts")',

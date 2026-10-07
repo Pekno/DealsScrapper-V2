@@ -3,7 +3,10 @@ import { SharedConfigService } from '@dealscrapper/shared-config';
 import { PrismaService, CategoryDto } from '@dealscrapper/database';
 import type { Prisma } from '@prisma/client';
 import { CategoryDto as LocalCategoryDto } from './dto/category.dto.js';
-import { buildCategoryDisplayPath, isCategorySelectable } from './utils/category-display.utils.js';
+import {
+  buildCategoryDisplayPath,
+  isCategorySelectable,
+} from './utils/category-display.utils.js';
 import { createServiceLogger } from '@dealscrapper/shared-logging';
 import { apiLogConfig } from '../config/logging.config.js';
 
@@ -18,7 +21,6 @@ export class CategoriesService {
   ) {
     this.schedulerUrl = this.sharedConfig.get<string>('SCHEDULER_URL');
   }
-
 
   /**
    * Get categories with optional search and site filtering
@@ -38,7 +40,9 @@ export class CategoriesService {
       // Filter by site(s) if provided
       if (siteIds && siteIds.length > 0) {
         whereClause.siteId = { in: siteIds };
-        this.logger.debug(`Filtering categories by sites: ${siteIds.join(', ')}`);
+        this.logger.debug(
+          `Filtering categories by sites: ${siteIds.join(', ')}`
+        );
       }
 
       // Add search functionality if searchText is provided
@@ -169,7 +173,6 @@ export class CategoriesService {
     }
   }
 
-
   /**
    * Get categories filtered by site
    * @param siteId - Site ID (dealabs, vinted, leboncoin)
@@ -292,7 +295,11 @@ export class CategoriesService {
       isActive: category.isActive,
       userCount: category.userCount,
       displayPath: buildCategoryDisplayPath(category),
-      isSelectable: isCategorySelectable(category.isSelectable, category.level, category.siteId),
+      isSelectable: isCategorySelectable(
+        category.isSelectable,
+        category.level,
+        category.siteId
+      ),
       createdAt: category.createdAt,
       updatedAt: category.updatedAt,
     };

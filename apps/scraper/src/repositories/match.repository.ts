@@ -242,6 +242,19 @@ export class MatchRepository
           );
           continue;
         }
+        // Check if the referenced article was deleted before the match was inserted
+        // (e.g. concurrent DB cleanup) - the nested connect can no longer resolve, skip silently
+        if (
+          error &&
+          typeof error === 'object' &&
+          'code' in error &&
+          error.code === 'P2025'
+        ) {
+          this.logger.debug(
+            `Skipping match for filter ${matchesData[i].filterId} and article ${matchesData[i].articleId}: referenced article no longer exists (P2025)`
+          );
+          continue;
+        }
         // Non-duplicate errors are real failures
         this.handleDatabaseError(
           error,

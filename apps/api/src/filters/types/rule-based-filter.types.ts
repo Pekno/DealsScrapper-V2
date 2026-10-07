@@ -8,6 +8,8 @@ import {
   IsOptional,
   ValidateNested,
   IsNotEmpty,
+  Min,
+  Max,
 } from 'class-validator';
 import { Transform, plainToInstance, Type } from 'class-transformer';
 
@@ -24,7 +26,10 @@ import type {
   ComputedField,
   FieldTypeMap,
 } from '@dealscrapper/shared-types';
-import { COMMON_FILTERABLE_FIELDS, SiteSource } from '@dealscrapper/shared-types';
+import {
+  COMMON_FILTERABLE_FIELDS,
+  SiteSource,
+} from '@dealscrapper/shared-types';
 
 // Re-export shared types for convenience (maintains backward compatibility)
 export type {
@@ -98,7 +103,8 @@ export class FilterRuleDto {
   weight?: number = 1.0;
 
   @ApiPropertyOptional({
-    description: 'Site-specific rule (only applies to articles from this site). If not specified, applies to all sites.',
+    description:
+      'Site-specific rule (only applies to articles from this site). If not specified, applies to all sites.',
     example: SiteSource.DEALABS,
     enum: SiteSource,
   })
@@ -190,22 +196,20 @@ export class RuleBasedFilterExpressionDto {
   matchLogic?: LogicalOperator = 'AND';
 
   @ApiPropertyOptional({
-    description: 'Minimum score threshold for matches',
+    description:
+      'Minimum match score threshold (0-100). The score is a normalized ' +
+      'percentage computed as (earnedWeight / totalWeight) * 100, so this ' +
+      'value must be authored on the same 0-100 scale.',
     example: 75,
     default: 50,
+    minimum: 0,
+    maximum: 100,
   })
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(100)
   minScore?: number = 50;
-
-  @ApiPropertyOptional({
-    description: 'Scoring calculation method',
-    example: 'weighted',
-    default: 'weighted',
-  })
-  @IsOptional()
-  @IsString()
-  scoreMode?: 'weighted' | 'percentage' | 'points' = 'weighted';
 }
 
 // Example complex filter expressions
@@ -263,7 +267,6 @@ export const EXAMPLE_FILTERS = {
     ],
     matchLogic: 'AND',
     minScore: 75,
-    scoreMode: 'weighted',
   } as RuleBasedFilterExpression,
 
   // Console deals with time constraints
@@ -303,6 +306,5 @@ export const EXAMPLE_FILTERS = {
     ],
     matchLogic: 'AND',
     minScore: 80,
-    scoreMode: 'weighted',
   } as RuleBasedFilterExpression,
 };
